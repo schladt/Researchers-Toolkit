@@ -207,11 +207,38 @@ def semantic_scholar_paper_context(paper):
         # create paper node
         add_paper_to_graph(paper)
 
-        # get citations for paper
-        citations = []
+        # add citations and references
+        add_citations_references(paper)
+
+        # create reference nodes
+        # create relationship between paper and references
+
+        # create keyword nodes
+        # create relationship between paper and keywords
+
+        # create venue node
+        # create relationship between paper and venue
+
+    else:
+        pass
+
+    # close requests session
+    requests_session.close()
+
+def add_citations_references(paper):
+    """
+    Add citations and references to the graph database
+    INPUT: paper - a paper object from Semantic Scholar
+    """
+    global driver
+    requests_session = requests.Session()
+
+    # get citations for paper
+    for operation in ["citations", "references"]:
+        citations = [] # also used for references
         offset = 0
         while (1):
-            url = f"https://api.semanticscholar.org/graph/v1/paper/{paper['paperId']}/citations"
+            url = f"https://api.semanticscholar.org/graph/v1/paper/{paper['paperId']}/{operation}"
             params = {
                 "fields": "title,authors,year,venue,paperId,abstract,url",
                 "limit": 100,
@@ -239,50 +266,48 @@ def semantic_scholar_paper_context(paper):
 
         # add each citation to the graph
         for citation in citations:
-            add_paper_to_graph(citation["citingPaper"])
+            if operation == "citations":
+                add_paper_to_graph(citation["citingPaper"])
+            else:
+                add_paper_to_graph(citation["citedPaper"])
 
         # create relationship between paper and citations
-        for citation in citations:
-            if 'paperId' in citation["citingPaper"]:
-                query_text = (
-                    "MATCH (p:Paper {id: $paperId}) "
-                    "MATCH (c:Paper {id: $citationId}) "
-                    "MERGE (p)-[:CITED_BY]->(c)"
-                )
-                summary = driver.execute_query(query_text, paperId=paper['paperId'], citationId=citation["citingPaper"]['paperId'])            
-            elif 'title' in citation["citingPaper"]:
-                query_text = (
-                    "MATCH (p:Paper {id: $paperId}) "
-                    "MATCH (c:Paper {Title: $citationTitle}) "
-                    "MERGE (p)-[:CITED_BY]->(c)"
-                )
-                summary = driver.execute_query(query_text, paperId=paper['paperId'], citationTitle=citation["citingPaper"]['title'])
-            else:
-                continue
-
-        # create citation nodes 
-
-        # create reference nodes
-
-        # create keyword nodes
-
-        # create year node
-
-
-
-        
-
-        # create relationship between paper and references
-
-        # create relationship between paper and keywords
-
-        # create relationship between paper and year
-
-    else:
-        pass
-
-    # close requests session
-    requests_session.close()
+        if operation == "citations":
+            for citation in citations:
+                if 'paperId' in citation["citingPaper"]:
+                    query_text = (
+                        "MATCH (p:Paper {id: $paperId}) "
+                        "MATCH (c:Paper {id: $citationId}) "
+                        "MERGE (p)-[:CITED_BY]->(c)"
+                    )
+                    summary = driver.execute_query(query_text, paperId=paper['paperId'], citationId=citation["citingPaper"]['paperId'])            
+                elif 'title' in citation["citingPaper"]:
+                    query_text = (
+                        "MATCH (p:Paper {id: $paperId}) "
+                        "MATCH (c:Paper {Title: $citationTitle}) "
+                        "MERGE (p)-[:CITED_BY]->(c)"
+                    )
+                    summary = driver.execute_query(query_text, paperId=paper['paperId'], citationTitle=citation["citingPaper"]['title'])
+                else:
+                    continue
+        else:
+            for citation in citations:
+                if 'paperId' in citation["citedPaper"]:
+                    query_text = (
+                        "MATCH (p:Paper {id: $paperId}) "
+                        "MATCH (c:Paper {id: $citationId}) "
+                        "MERGE (p)-[:REFERENCES]->(c)"
+                    )
+                    summary = driver.execute_query(query_text, paperId=paper['paperId'], citationId=citation["citedPaper"]['paperId'])            
+                elif 'title' in citation["citedPaper"]:
+                    query_text = (
+                        "MATCH (p:Paper {id: $paperId}) "
+                        "MATCH (c:Paper {Title: $citationTitle}) "
+                        "MERGE (p)-[:REFERENCES]->(c)"
+                    )
+                    summary = driver.execute_query(query_text, paperId=paper['paperId'], citationTitle=citation["citedPaper"]['title'])
+                else:
+                    continue
 
 def add_paper_to_graph(paper):
     """Add a paper to the graph database"""
