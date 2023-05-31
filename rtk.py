@@ -203,22 +203,11 @@ def semantic_scholar_paper_context(paper):
 
     # add paper to graph
     if selection.lower() == "g":
-
         # create paper node
         add_paper_to_graph(paper)
 
         # add citations and references
         add_citations_references(paper)
-
-        # create reference nodes
-        # create relationship between paper and references
-
-        # create keyword nodes
-        # create relationship between paper and keywords
-
-        # create venue node
-        # create relationship between paper and venue
-
     else:
         pass
 
@@ -310,7 +299,10 @@ def add_citations_references(paper):
                     continue
 
 def add_paper_to_graph(paper):
-    """Add a paper to the graph database"""
+    """
+    Add a paper to the graph database. Also adds authors, venues, and keywords along with relationships.
+    INPUT: paper - a paper object from Semantic Scholar
+    """
     global driver
     print("Adding paper to graph...", style=prompt_style)
 
@@ -398,6 +390,24 @@ def add_paper_to_graph(paper):
             )
             summary = driver.execute_query(query_text, paperId=paper['paperId'], name=author['name'])
             print(f'created {summary.summary.counters.nodes_created} nodes and {summary.summary.counters.relationships_created} relationships')
+
+    # create venue node
+    if 'venue' in paper and paper['venue'] is not None:
+        query_text = (
+            "MERGE (v:Venue {name: $name}) "
+        )
+        summary = driver.execute_query(query_text, name=paper['venue'])
+        print(f'created {summary.summary.counters.nodes_created} nodes and {summary.summary.counters.relationships_created} relationships')
+    
+    # create relationship between paper and venue
+    if 'venue' in paper and paper['venue'] is not None:
+        query_text = (
+            "MATCH (p:Paper {id: $paperId}) "
+            "MATCH (v:Venue {name: $name}) "
+            "MERGE (p)-[:PUBLISHED_IN]->(v) "
+        )
+        summary = driver.execute_query(query_text, paperId=paper['paperId'], name=paper['venue'])
+        print(f'created {summary.summary.counters.nodes_created} nodes and {summary.summary.counters.relationships_created} relationships')
 
 
 def search_local_database():
