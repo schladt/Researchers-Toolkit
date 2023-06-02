@@ -156,9 +156,10 @@ def search_semantic_scholar():
     while (1):
 
         print(HTML("<blue>What type of search would you like: </blue>"), style=prompt_style)
-        print("\t1. Search by keyword", style=prompt_style)
-        print("\t2. Search by author", style=prompt_style)
-        print("\t3. 'q' to return ", style=prompt_style)
+        print("\t1. Search Semantic Scholar by keyword", style=prompt_style)
+        print("\t2. Search Semantic Scholar by author", style=prompt_style)
+        print("\t3. Search Semantic Scholar by Paper ID ", style=prompt_style)
+        print("\t(anything else to return)", style=prompt_style)
 
         selection = prompt_session.prompt(prompt_text, style=prompt_style)
 
@@ -168,7 +169,11 @@ def search_semantic_scholar():
         elif selection == "2":
             search_semantic_scholar_by_author()
 
-        elif selection.lower()[0] == "q":
+        elif selection == "3":
+            paper_id = prompt_session.prompt(HTML("<blue>Enter paper ID: </blue>"), style=prompt_style)
+            semantic_scholar_paper_context(paper_id)
+            
+        else:
             break
 
 def search_semantic_scholar_by_keyword():
@@ -262,16 +267,164 @@ def search_semantic_scholar_by_keyword():
 
 def search_semantic_scholar_by_author(): 
     """Search Semantic Scholar for a paper by author"""
+    global x_api_key
 
-    context_path = "(Semantic Scholar > Search by author)"
+    context_path = "(Semantic Scholar > Search by Author)"
     prompt_text = [
         ('class:green', f'\n{context_path} >>> '),
     ]
 
-    print("What author would you like to search for?", style=prompt_style)
-    author = prompt_session.prompt(prompt_text, style=prompt_style)
+    print(HTML("<blue>Enter author's name to search: </blue>"), style=prompt_style)
+    search_term = prompt_session.prompt(prompt_text, style=prompt_style)
 
-    print(f"Searching Semantic Scholar for '{author}'...", style=prompt_style)
+    print(f"Searching Semantic Scholar for '{search_term}'...", style=prompt_style)
+
+    offset = 0
+    limit = 10 
+    requests_session = requests.Session()
+    while (1):
+        url = "https://api.semanticscholar.org/graph/v1/author/search"
+        params = {
+            "query": search_term,
+            "offset": offset,
+            "fields": "authorId,url,name,paperCount,citationCount",
+            "limit": limit,  
+        }
+        # add headers
+        headers = {
+            "x-api-key": x_api_key,
+        }
+        response = requests_session.get(url, params=params, headers=headers)
+
+        # check for 200 response
+        if response.status_code != 200:
+            print(f"Error: {response.status_code} - {response.reason}", style=prompt_style)
+            break
+
+        # check for no results
+        if response.json()["total"] == 0:
+            print(f"No results for '{search_term}'", style=prompt_style)
+            break
+
+        # show titles of the authors
+        print(HTML(f'<blue>Showing authors {offset+1} to {offset+limit} of {response.json()["total"]}:</blue>'), style=prompt_style)
+
+        results = response.json()["data"]
+        i = 0
+        for author in results:
+            print(HTML(f'<blue>\t{i + offset}:</blue> {author["name"]}, {author["paperCount"]} papers, {author["citationCount"]} citations'), style=prompt_style)
+            i += 1
+        
+        # prompt for which author to view
+        print(HTML("\n<blue>Select from the following options:</blue>"), style=prompt_style)
+        print("\tEnter # to select author above for more details")
+        print("\tEnter 'n' to see the next page of results")
+        print("\tEnter 'p' to see the previous page of results")
+        print("\tEnter 'q' to return")
+        selection = prompt_session.prompt(prompt_text, style=prompt_style)
+
+        # attempt to convert selection to int
+        try:
+            selection = int(selection)
+        except ValueError:
+            pass
+
+        if selection in range(offset, offset + limit):
+            author = results[selection - offset]
+            semantic_scholar_author_context(author['authorId'])
+
+        elif type(selection) == int and selection not in range(offset, offset + limit):
+            print(f"Invalid selection: {selection}", style=prompt_style)
+            break 
+
+        # get next
+        elif selection.lower() == "n":
+            offset += limit
+
+        # get previous
+        elif selection.lower() == "p":
+            offset -= limit
+            if offset < 0:
+                offset = 0
+                
+        # break to return to main menu
+        else:
+            break
+
+    # close requests session
+    requests_session.close()
+
+def semantic_scholar_author_context(author_id):
+    global driver
+    requests_session = requests.Session()
+    url = f"https://api.semanticscholar.org/graph/v1/author/{author_id}"
+    params = {
+        "fields": ("authorId,url,name,paperCount,citationCount,"
+                    "papers.title,"
+                    "papers.authors,"
+                    "papers.year,"
+                    "papers.paperId,"
+                    "papers.citationCount,"
+                    "papers.referenceCount,"
+                    "papers.venue,"
+                    "papers.abstract")
+    }
+    # add headers
+    headers = {
+        "x-api-key": x_api_key,
+    }
+    print(url)
+    response = requests_session.get(url, params=params, headers=headers)
+
+    # check for 200 response
+    if response.status_code != 200:
+        print(f"Error: {response.status_code} - {response.reason}", style=prompt_style)
+        # close requests session
+        requests_session.close()
+        return
+
+    author_dict = response.json()
+    
+    # display author details
+    print(HTML(f"<blue>Showing details for author</blue> {author_dict['name']} :"), style=prompt_style)
+    print(HTML(f'<blue>\tName:</blue> {author_dict["name"]}'), style=prompt_style)
+    print(HTML(f'<blue>\tURL:</blue> {author_dict["url"]}'), style=prompt_style)
+    print(HTML(f'<blue>\tPaper Count:</blue> {author_dict["paperCount"]}'), style=prompt_style)
+    print(HTML(f'<blue>\tCitation Count:</blue> {author_dict["citationCount"]}'), style=prompt_style)
+    print(HTML(f'<blue>\tAuthor ID:</blue> {author_dict["authorId"]}'), style=prompt_style)
+    print(HTML(f'<blue>\tPapers:</blue> '), style=prompt_style)
+    for paper in author_dict["papers"]:
+        print(f'\t\t- {paper["title"]}, {paper["year"]}, {paper["venue"]}', style=prompt_style)
+    
+    # prompt for what to do next
+    context_path = f"(Semantic Scholar > Author > {author_dict['authorId']})"
+    prompt_text = [
+        ('class:green', f'\n{context_path} >>> '),
+    ]
+    print(HTML("\n<blue>What would you like to do next?:</blue>"), style=prompt_style)
+    print("\tEnter 'g' to add this author and their papers to the graph")
+    print(HTML("\tEnter 'a' to add this author, their papers, and all citations and references to graph <red>WARNING: this may take a long time!</red>"), style=prompt_style)
+    print("\tEnter 'q' to return to main menu")
+    selection = prompt_session.prompt(prompt_text, style=prompt_style)
+
+    # add paper to graph
+    if selection.lower() == "g":
+        for paper_dict in author_dict["papers"]:
+            paper = Paper(paper_dict)
+            # create paper node
+            add_paper_to_graph(paper)
+    elif selection.lower() == "a":
+        for paper_dict in author_dict["papers"]:
+            paper = Paper(paper_dict)
+            # create paper node
+            add_paper_to_graph(paper)
+            # add citations and references
+            add_references(paper)
+    else:
+        pass
+
+    # close requests session
+    requests_session.close()
 
 def semantic_scholar_paper_context(paper_id):
     global driver
@@ -311,17 +464,22 @@ def semantic_scholar_paper_context(paper_id):
     print(HTML(f'<blue>\tAbstract:</blue> {paper.abstract}'), style=prompt_style)
     
     # prompt for what to do next
-    context_path = f"(Semantic Scholar > {paper.id})"
+    context_path = f"(Semantic Scholar > Paper > {paper.id})"
     prompt_text = [
         ('class:green', f'\n{context_path} >>> '),
     ]
     print(HTML("\n<blue>What would you like to do next?:</blue>"), style=prompt_style)
     print("\tEnter 'g' to add this paper to the graph")
+    print(HTML("\tEnter 'a' to this paper along with citations and references to graph <red>WARNING: this may take a long time!</red>"), style=prompt_style)
     print("\tEnter 'q' to return to main menu")
     selection = prompt_session.prompt(prompt_text, style=prompt_style)
 
     # add paper to graph
     if selection.lower() == "g":
+        # create paper node
+        add_paper_to_graph(paper)
+
+    elif selection.lower() == "a":
         # create paper node
         add_paper_to_graph(paper)
 
@@ -560,8 +718,7 @@ def modify_database():
     print(HTML('<red>Not implemented yet!</red>'), style=prompt_style)
 
 def main_menu():
-        
-    # main loop
+    # main loop - this is mostly a placeholder until we have more functionality. For now it just calls search_semantic_scholar()
     selection = ""
     while selection.lower() not in ["quit", "exit", "4"]: 
 
@@ -569,26 +726,29 @@ def main_menu():
         prompt_text = [
             ('class:green', f'\n{context_path} >>> '),
     ]
-
         print()
-        print(HTML("<blue>What would you like to do?</blue>"), style=prompt_style)
-        print()
-        print("\t1. Search Semantic Scholar", style=prompt_style)
-        print("\t2. Search local database", style=prompt_style)
-        print("\t3. Manually modify database (advanced)", style=prompt_style)
-        print("\t4. 'q' (or anything else) to exit", style=prompt_style)
-
-
-        selection = prompt_session.prompt(prompt_text, style=prompt_style)
+        search_semantic_scholar()
+        break
+        # print()
+        # print(HTML("<blue>What would you like to do?</blue>"), style=prompt_style)
+        # print()
         
-        if selection == "1":
-            search_semantic_scholar()
-        elif selection == "2":
-            search_local_database()
-        elif selection == "3":
-            modify_database()
-        else:
-            break
+        # print("\t1. Search Semantic Scholar", style=prompt_style)
+        # print("\t2. Search local database", style=prompt_style)
+        # print("\t3. Manually modify database (advanced)", style=prompt_style)
+        # print("\t4. 'q' (or anything else) to exit", style=prompt_style)
+
+
+        # selection = prompt_session.prompt(prompt_text, style=prompt_style)
+        
+        # if selection == "1":
+        #     search_semantic_scholar()
+        # elif selection == "2":
+        #     search_local_database()
+        # elif selection == "3":
+        #     modify_database()
+        # else:
+        #     break
 
     print(HTML('<red>GoodBye!</red>'), style=prompt_style)
 
