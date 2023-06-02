@@ -5,6 +5,7 @@ Mike Schladt - 2023
 
 import os
 import requests
+import hashlib
 
 # prompt_toolkit imports
 from prompt_toolkit import PromptSession
@@ -14,6 +15,14 @@ from prompt_toolkit.styles import Style
 # neo4j imports
 from neo4j import GraphDatabase
 
+# nltk imports
+import nltk
+import string
+
+# Install the necessary NLTK data
+nltk.download('punkt', quiet=True)
+nltk.download('stopwords', quiet=True)
+nltk.download('wordnet', quiet=True)
 
 # set up the prompt session and style
 prompt_session = PromptSession()
@@ -27,6 +36,114 @@ prompt_style = Style.from_dict({
 driver = None
 x_api_key = None
 
+# paper class
+class Paper:
+    """
+    Class for a paper
+    Attributes:
+        title (str): the title of the paper
+        author (str): the primary author of the paper
+        year (int): the year the paper was published
+        id (str): the unique id of the paper
+        citation_count (int): the number of citations the paper has
+        reference_count (int): the number of references the paper has
+        venue (str): the venue the paper was published in
+        tldr (str): the TLDR of the paper
+        abstract (str): the abstract of the paper
+        url (str): the url of the paper    
+    """
+
+    def __init__(self, paper_dict):
+        """ 
+        INPUT: paper_dict - a dictionary containing the paper details from Semantic Scholar JSON response
+        """
+
+        # parse paper details
+        
+        # get title
+        if 'title' not in paper_dict or paper_dict['title'] is None:
+            return # all papers should have a title
+        self.title = paper_dict['title']
+
+        # get primary author
+        if 'authors' in paper_dict and len(paper_dict['authors']) > 0:
+            self.author = paper_dict['authors'][0]['name']
+        else:
+            self.author = "unknown"
+
+        # get all authors as a list of dicts
+        self.authors = []
+        for author in paper_dict["authors"]:
+            if 'authorId' in author and author['authorId'] is not None:
+                author_id = author['authorId']
+            elif 'name' in author and author['name'] is not None:
+                author_id = self.get_sha1_hash(author['name'])
+            else:
+                continue # skip this author if there is no id or name
+            
+            # add name
+            if 'name' in author and author['name'] is not None:
+                author_name = author['name']
+            else:
+                author_name = "unknown"
+
+            self.authors.append({"id": author_id, "name": author_name})
+
+        # get paper id
+        if 'paperId' in paper_dict and paper_dict['paperId'] is not None:
+            self.id = paper_dict['paperId']
+        else:
+            # create a unique id for the paper if one does not exist
+            self.id = self.get_sha1_hash(self.title + self.author)
+
+        # all other attributes are optional
+        if 'year' in paper_dict and paper_dict['year'] is not None:
+            self.year = paper_dict['year']
+        else:
+            self.year = 0
+        
+        if 'venue' in paper_dict and paper_dict['venue'] is not None:
+            self.venue = paper_dict['venue']
+        else:
+            self.venue = ""
+        
+        if 'abstract' in paper_dict and paper_dict['abstract'] is not None:
+            self.abstract = paper_dict['abstract']
+        else:
+            self.abstract = ""
+        
+        if "tldr" in paper_dict and paper_dict['tldr'] is not None:
+            self.tldr = paper_dict['tldr']['text']
+        else:
+            self.tldr = ""
+        
+        if 'citationCount' in paper_dict and paper_dict['citationCount'] is not None:
+            self.citation_count = paper_dict['citationCount']
+        else:
+            self.citation_count = 0
+        
+        if 'referenceCount' in paper_dict and paper_dict['referenceCount'] is not None:
+            self.reference_count = paper_dict['referenceCount']
+        else:
+            self.reference_count = 0
+
+        if 'url' in paper_dict and paper_dict['url'] is not None:
+            self.url = paper_dict['url']
+        else:
+            self.url = ""
+
+    def get_sha1_hash(self, text):
+        """Returns the SHA1 hash of the given string."""
+        hash_object = hashlib.sha1(text.encode())
+        hex_dig = hash_object.hexdigest()
+        return hex_dig
+
+    def __repr__(self):
+        return f"Paper(title={self.title}, primary author={self.author}, year={self.year}, paperId={self.id}, citation count={self.citation_count}, reference count={self.reference_count}, venue={self.venue}, tldr={self.tldr}, abstract={self.abstract}, url={self.url})"
+
+    def __str__(self):
+        return f"Paper(title={self.title}, primary author={self.author}, year={self.year}, paperId={self.id}, citation count={self.citation_count}, reference count={self.reference_count}, venue={self.venue}, tldr={self.tldr}, abstract={self.abstract}, url={self.url})"
+    
 def search_semantic_scholar():
     """Search Semantic Scholar for a paper"""
 
@@ -63,7 +180,7 @@ def search_semantic_scholar_by_keyword():
         ('class:green', f'\n{context_path} >>> '),
     ]
 
-    print(HTML("<blue>What keyword would you like to search for?</blue>"), style=prompt_style)
+    print(HTML("<blue>What keyword(s) would you like to search?</blue>"), style=prompt_style)
     keyword = prompt_session.prompt(prompt_text, style=prompt_style)
 
     print(f"Searching Semantic Scholar for '{keyword}'...", style=prompt_style)
@@ -120,7 +237,7 @@ def search_semantic_scholar_by_keyword():
 
         if selection in range(offset, offset + limit):
             paper = results[selection - offset]
-            semantic_scholar_paper_context(paper)
+            semantic_scholar_paper_context(paper['paperId'])
 
         elif type(selection) == int and selection not in range(offset, offset + limit):
             print(f"Invalid selection: {selection}", style=prompt_style)
@@ -156,10 +273,10 @@ def search_semantic_scholar_by_author():
 
     print(f"Searching Semantic Scholar for '{author}'...", style=prompt_style)
 
-def semantic_scholar_paper_context(paper):
+def semantic_scholar_paper_context(paper_id):
     global driver
     requests_session = requests.Session()
-    url = f"https://api.semanticscholar.org/graph/v1/paper/{paper['paperId']}"
+    url = f"https://api.semanticscholar.org/graph/v1/paper/{paper_id}"
     params = {
         "fields": "title,authors,year,citationCount,referenceCount,venue,paperId,tldr,abstract,url",
     }
@@ -176,24 +293,25 @@ def semantic_scholar_paper_context(paper):
         requests_session.close()
         return
 
-    paper = response.json()
-    print(HTML(f"<blue>Showing details for paper</blue> \"{paper['title']}\" :"), style=prompt_style)
-    print(HTML(f'<blue>\tTitle:</blue> {paper["title"]}'), style=prompt_style)
-    print(HTML(f'<blue>\tURL:</blue> {paper["url"]}'), style=prompt_style)
+    paper_dict = response.json()
+    
+    # create paper object and display details
+    paper = Paper(paper_dict)
+    print(HTML(f"<blue>Showing details for paper</blue> \"{paper.title}\" :"), style=prompt_style)
+    print(HTML(f'<blue>\tTitle:</blue> {paper.title}'), style=prompt_style)
+    print(HTML(f'<blue>\tURL:</blue> {paper.url}'), style=prompt_style)
     print(HTML(f'<blue>\tAuthors:</blue> '), style=prompt_style)
-    for author in paper["authors"]:
+    for author in paper.authors:
         print(f'\t\t{author["name"]}', style=prompt_style)
-    print(HTML(f'<blue>\tYear:</blue> {paper["year"]}'), style=prompt_style)
-    print(HTML(f'<blue>\tCitation Count:</blue> {paper["citationCount"]}'), style=prompt_style)
-    print(HTML(f'<blue>\tVenue:</blue> {paper["venue"]}'), style=prompt_style)
-    print(HTML(f'<blue>\tPaper ID:</blue> {paper["paperId"]}'), style=prompt_style)
-    if 'tldr' in paper and paper['tldr'] is not None:
-        print(HTML(f'<blue>\tTLDR:</blue> {paper["tldr"]["text"]}'), style=prompt_style)
-    if 'abstract' in paper and paper['abstract'] is not None:
-        print(HTML(f'<blue>\tAbstract:</blue> {paper["abstract"]}'), style=prompt_style)
+    print(HTML(f'<blue>\tYear:</blue> {paper.year}'), style=prompt_style)
+    print(HTML(f'<blue>\tCitation Count:</blue> {paper.citation_count}'), style=prompt_style)
+    print(HTML(f'<blue>\tVenue:</blue> {paper.venue}'), style=prompt_style)
+    print(HTML(f'<blue>\tPaper ID:</blue> {paper.id}'), style=prompt_style)
+    print(HTML(f'<blue>\tTLDR:</blue> {paper.tldr}'), style=prompt_style)
+    print(HTML(f'<blue>\tAbstract:</blue> {paper.abstract}'), style=prompt_style)
     
     # prompt for what to do next
-    context_path = f"(Semantic Scholar > {paper['paperId']})"
+    context_path = f"(Semantic Scholar > {paper.id})"
     prompt_text = [
         ('class:green', f'\n{context_path} >>> '),
     ]
@@ -208,27 +326,30 @@ def semantic_scholar_paper_context(paper):
         add_paper_to_graph(paper)
 
         # add citations and references
-        add_citations_references(paper)
+        add_references(paper)
     else:
         pass
 
     # close requests session
     requests_session.close()
 
-def add_citations_references(paper):
+def add_references(paper):
     """
     Add citations and references to the graph database
-    INPUT: paper - a paper object from Semantic Scholar
+    INPUT: paper - Paper class object
     """
     global driver
     requests_session = requests.Session()
 
-    # get citations for paper
+    num_nodes = 0
+    num_relationships = 0
+
+    # get references for paper
     for operation in ["citations", "references"]:
-        citations = [] # also used for references
+        references = [] # also used for citations
         offset = 0
         while (1):
-            url = f"https://api.semanticscholar.org/graph/v1/paper/{paper['paperId']}/{operation}"
+            url = f"https://api.semanticscholar.org/graph/v1/paper/{paper.id}/{operation}"
             params = {
                 "fields": "title,authors,year,venue,paperId,abstract,url,citationCount,referenceCount",
                 "limit": 100,
@@ -245,64 +366,51 @@ def add_citations_references(paper):
                 print(response.json())
                 break
 
-            # add the citations to the list
-            citations.extend(response.json()["data"])
+            # add the references to the list
+            references.extend(response.json()["data"])
 
-            # check if there are more citations
+            # check if there are more references
             if 'next' not in response.json():
                 break    
 
             offset += 100
 
-        # add each citation to the graph
-        for citation in citations:
+        # add each reference to the graph and create relationship
+        for reference in references:
             if operation == "citations":
-                add_paper_to_graph(citation["citingPaper"])
-            else:
-                add_paper_to_graph(citation["citedPaper"])
+                ref_paper = Paper(reference["citingPaper"])
+                add_paper_to_graph(ref_paper)
 
-        # create relationship between paper and citations
-        if operation == "citations":
-            for citation in citations:
-                if 'paperId' in citation["citingPaper"]:
-                    query_text = (
-                        "MATCH (p:Paper {id: $paperId}) "
-                        "MATCH (c:Paper {id: $citationId}) "
-                        "MERGE (p)<-[:REFERENCES]-(c)"
+                # create relationship between paper and references
+                query_text = (
+                        "MATCH (p:Paper {PaperId: $paperId}) "
+                        "MATCH (r:Paper {PaperId: $refId}) "
+                        "MERGE (p)<-[:REFERENCES]-(r)"
                     )
-                    summary = driver.execute_query(query_text, paperId=paper['paperId'], citationId=citation["citingPaper"]['paperId'])            
-                elif 'title' in citation["citingPaper"]:
-                    query_text = (
-                        "MATCH (p:Paper {id: $paperId}) "
-                        "MATCH (c:Paper {Title: $citationTitle}) "
-                        "MERGE (p)<-[:REFERENCES]-(c)"
+                summary = driver.execute_query(query_text, paperId=paper.id, refId=ref_paper.id)
+                num_nodes += summary.summary.counters.nodes_created
+                num_relationships += summary.summary.counters.relationships_created   
+
+            else:
+                ref_paper = Paper(reference["citedPaper"])
+                add_paper_to_graph(ref_paper)
+
+                # create relationship between paper and references
+                query_text = (
+                        "MATCH (p:Paper {PaperId: $paperId}) "
+                        "MATCH (r:Paper {PaperId: $refId}) "
+                        "MERGE (p)-[:REFERENCES]->(r)"
                     )
-                    summary = driver.execute_query(query_text, paperId=paper['paperId'], citationTitle=citation["citingPaper"]['title'])
-                else:
-                    continue
-        else:
-            for citation in citations:
-                if 'paperId' in citation["citedPaper"]:
-                    query_text = (
-                        "MATCH (p:Paper {id: $paperId}) "
-                        "MATCH (c:Paper {id: $citationId}) "
-                        "MERGE (p)-[:REFERENCES]->(c)"
-                    )
-                    summary = driver.execute_query(query_text, paperId=paper['paperId'], citationId=citation["citedPaper"]['paperId'])            
-                elif 'title' in citation["citedPaper"]:
-                    query_text = (
-                        "MATCH (p:Paper {id: $paperId}) "
-                        "MATCH (c:Paper {Title: $citationTitle}) "
-                        "MERGE (p)-[:REFERENCES]->(c)"
-                    )
-                    summary = driver.execute_query(query_text, paperId=paper['paperId'], citationTitle=citation["citedPaper"]['title'])
-                else:
-                    continue
+                summary = driver.execute_query(query_text, paperId=paper.id, refId=ref_paper.id)
+                num_nodes += summary.summary.counters.nodes_created
+                num_relationships += summary.summary.counters.relationships_created
+
+    print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)      
 
 def add_paper_to_graph(paper):
     """
     Add a paper to the graph database. Also adds authors, venues, and keywords along with relationships.
-    INPUT: paper - a paper object from Semantic Scholar
+    INPUT: paper - Paper class object
     """
     global driver
 
@@ -312,14 +420,8 @@ def add_paper_to_graph(paper):
     print("Adding paper to graph...", style=prompt_style)
 
     # create paper node
-    if 'paperId' in paper and paper['paperId'] is not None:
-        query_text = "MERGE (p:Paper {id: $paper_id}) "
-    elif 'title' in paper and paper['title'] is not None:
-        query_text = "MERGE (p:Paper {Title: $title}) "
-    else:
-        return
-
-    query_text += (
+    query_text = (
+        "MERGE (p:Paper {PaperId: $paperId}) "
         "SET p.Title=$title "
         "SET p.Year = $year "
         "SET p.Venue = $venue "
@@ -330,105 +432,124 @@ def add_paper_to_graph(paper):
         "SET p.CitationCount = $citationCount "
         "SET p.ReferenceCount = $referenceCount "
     )
-    if 'authors' in paper and len(paper['authors']) > 0:
-        author = paper['authors'][0]['name']
-    else:
-        author = "Unknown"
-    if 'abstract' in paper and paper['abstract'] is not None:
-        abstract = paper['abstract']
-    else:
-        abstract = ""
-    if "tldr" in paper and paper['tldr'] is not None:
-        tldr = paper['tldr']['text']
-    else:
-        tldr = ""
-    if 'citationCount' in paper and paper['citationCount'] is not None:
-        citationCount = paper['citationCount']
-    else:
-        citationCount = 0
-    if 'referenceCount' in paper and paper['referenceCount'] is not None:
-        referenceCount = paper['referenceCount']
-    else:
-        referenceCount = 0
+
     summary = driver.execute_query(query_text, 
-                                paper_id = paper['paperId'],
-                                title = paper['title'],
-                                year = paper['year'],
-                                venue = paper['venue'],
-                                author = author,
-                                url = paper['url'],
-                                tldr = tldr,
-                                abstract = abstract,
-                                citationCount = citationCount,
-                                referenceCount = referenceCount
+                                paperId = paper.id,
+                                title = paper.title,
+                                year = paper.year,
+                                venue = paper.venue,
+                                author = paper.author,
+                                url = paper.url,
+                                tldr = paper.tldr,
+                                abstract = paper.abstract,
+                                citationCount = paper.citation_count,
+                                referenceCount = paper.reference_count
                             )
     num_nodes += summary.summary.counters.nodes_created
     num_relationships += summary.summary.counters.relationships_created
 
-    # create author nodes
-    for author in paper["authors"]:
-        if 'authorId' in author and author['authorId'] is not None:
-            query_text = (
-                "MERGE (a:Author {id: $authorId}) "
-                "SET a.Name=$name "
-            )
-            summary = driver.execute_query(query_text,
-                                    authorId = author['authorId'],
-                                    name = author['name']
-                                )
-            num_nodes += summary.summary.counters.nodes_created
-            num_relationships += summary.summary.counters.relationships_created
-
-        elif 'name' in author and author['name'] is not None:
-            query_text = (
-                "MERGE (a:Author {name: $name}) "
-            )
-            summary = driver.execute_query(query_text, name=author['name'])
-            num_nodes += summary.summary.counters.nodes_created
-            num_relationships += summary.summary.counters.relationships_created
-
-    # create relationships between paper and authors
-    for author in paper["authors"]:
-        if 'authorId' in author and author['authorId'] is not None:
-            query_text = (
-                "MATCH (p:Paper {id: $paperId}) "
-                "MATCH (a:Author {id: $authorId}) "
-                "MERGE (p)-[:AUTHORED_BY]->(a) "
-            )
-            summary = driver.execute_query(query_text, paperId=paper['paperId'], authorId=author['authorId'])
-            num_nodes += summary.summary.counters.nodes_created
-            num_relationships += summary.summary.counters.relationships_created
-
-        elif 'name' in author and author['name'] is not None:
-            query_text = (
-                "MATCH (p:Paper {id: $paperId}) "
-                "MATCH (a:Author {name: $name}) "
-                "MERGE (p)-[:AUTHORED_BY]->(a) "
-            )
-            summary = driver.execute_query(query_text, paperId=paper['paperId'], name=author['name'])
-            num_nodes += summary.summary.counters.nodes_created
-            num_relationships += summary.summary.counters.relationships_created
-
-    # create venue node
-    if 'venue' in paper and paper['venue'] is not None and paper['venue'] != "":
+    # create author nodes and relationship to paper
+    for author in paper.authors:
+        author_id = author["id"]
+        author_name = author["name"]
+        
         query_text = (
-            "MERGE (v:Venue {name: $name}) "
+            "MERGE (a:Author {AuthorId: $authorId}) "
+            "SET a.Name = $name "
         )
-        summary = driver.execute_query(query_text, name=paper['venue'])
+
+        summary = driver.execute_query(query_text, authorId=author_id, name=author_name)
         num_nodes += summary.summary.counters.nodes_created
         num_relationships += summary.summary.counters.relationships_created
-    
-        # create relationship between paper and venue
+
         query_text = (
-            "MATCH (p:Paper {id: $paperId}) "
-            "MATCH (v:Venue {name: $name}) "
+            "MATCH (p:Paper {PaperId: $paperId}) "
+            "MATCH (a:Author {AuthorId: $authorId}) "
+            "MERGE (p)-[:AUTHORED_BY]->(a) "
+        )
+        summary = driver.execute_query(query_text,
+                                authorId = author_id,
+                                paperId = paper.id
+                            )
+        num_nodes += summary.summary.counters.nodes_created
+        num_relationships += summary.summary.counters.relationships_created
+
+    # create venue node and relationship to paper
+    if paper.venue != "":
+        query_text = (
+            "MERGE (v:Venue {Name: $name}) "
+        )
+        summary = driver.execute_query(query_text, name=paper.venue)
+        num_nodes += summary.summary.counters.nodes_created
+        num_relationships += summary.summary.counters.relationships_created
+
+        query_text = (
+            "MATCH (v:Venue {Name: $name}) "
+            "MATCH (p:Paper {PaperId: $paperId}) "
             "MERGE (p)-[:PUBLISHED_IN]->(v) "
         )
-        summary = driver.execute_query(query_text, paperId=paper['paperId'], name=paper['venue'])
+        summary = driver.execute_query(query_text, name=paper.venue, paperId=paper.id)
         num_nodes += summary.summary.counters.nodes_created
         num_relationships += summary.summary.counters.relationships_created
     
+    # create keyword nodes from abstract, title, and tldr
+    # tokenize the text
+    tokens = text_tokenization(paper.abstract + " " + paper.title + " " + paper.tldr)
+
+    # create keyword nodes and add relationships
+    for token in tokens:
+        query_text = (
+            "MERGE (k:Keyword {Value: $token}) "
+        )
+        summary = driver.execute_query(query_text, token=token)
+        num_nodes += summary.summary.counters.nodes_created
+        num_relationships += summary.summary.counters.relationships_created
+        query_text = (
+            "MATCH (k:Keyword {Value: $token}) "
+            "MATCH (p:Paper {PaperId: $paperId}) "
+            "MERGE (p)-[:HAS_KEYWORD]->(k) "
+        )
+        summary = driver.execute_query(query_text, token=token, paperId=paper.id)
+        num_nodes += summary.summary.counters.nodes_created
+        num_relationships += summary.summary.counters.relationships_created    
+
     print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)
+
+def text_tokenization(text):
+    """
+    Tokenize text
+    INPUT: text - a string of text to be tokenized
+    OUTPUT: filtered_tokens - a list of tokens that have been tokenized, lemmatized, and filtered for stop words
+    """
+    # Get the list of stopwords
+    stopwords = nltk.corpus.stopwords.words("english")
+
+    # Create a lemmatizer object
+    lemmatizer = nltk.WordNetLemmatizer()
+
+
+    # Create a translation table that maps punctuation characters to None
+    table = str.maketrans('', '', string.punctuation)
+
+    # Translate the text, replacing all punctuation characters with empty strings
+    translated_text = text.translate(table)
+
+    # Tokenize the text
+    tokens = nltk.word_tokenize(translated_text)
+
+    # Lemmatize the tokens
+    tokens = [lemmatizer.lemmatize(token.lower(), 'v') for token in tokens]
+    tokens = [lemmatizer.lemmatize(token.lower(), 'n') for token in tokens]
+    tokens = [lemmatizer.lemmatize(token.lower(), 'a') for token in tokens]
+    tokens = [lemmatizer.lemmatize(token.lower(), 's') for token in tokens]
+
+    # Remove stop words from the tokens
+    filtered_tokens = [token.lower() for token in tokens if token not in stopwords]
+
+    # remove duplicates
+    filtered_tokens = list(set(filtered_tokens))
+
+    return filtered_tokens
 
 def search_local_database():
     """Search the local database for a paper or any other entity"""
