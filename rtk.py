@@ -6,6 +6,7 @@ Mike Schladt - 2023
 import os
 import requests
 import hashlib
+import html 
 
 # prompt_toolkit imports
 from prompt_toolkit import PromptSession
@@ -63,7 +64,7 @@ class Paper:
         # get title
         if 'title' not in paper_dict or paper_dict['title'] is None:
             return # all papers should have a title
-        self.title = paper_dict['title']
+        self.title = html.escape(paper_dict['title'])
 
         # get primary author
         if 'authors' in paper_dict and len(paper_dict['authors']) > 0:
@@ -108,12 +109,12 @@ class Paper:
             self.venue = ""
         
         if 'abstract' in paper_dict and paper_dict['abstract'] is not None:
-            self.abstract = paper_dict['abstract']
+            self.abstract = html.escape(paper_dict['abstract'])
         else:
             self.abstract = ""
         
         if "tldr" in paper_dict and paper_dict['tldr'] is not None:
-            self.tldr = paper_dict['tldr']['text']
+            self.tldr = html.escape(paper_dict['tldr']['text'])
         else:
             self.tldr = ""
         
