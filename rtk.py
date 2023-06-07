@@ -223,7 +223,18 @@ def search_semantic_scholar_by_keyword():
         results = response.json()["data"]
         i = 0
         for paper in results:
-            print(HTML(f'<blue>\t{i + offset}:</blue> {paper["title"]}, {paper["authors"][0]["name"]}, {paper["year"]}'), style=prompt_style)
+            if 'title' not in paper or paper['title'] is None:
+                continue
+            if 'authors' in paper and len(paper['authors']) > 0:
+                author = paper['authors'][0]['name']
+            else:
+                author = "unknown"
+            if 'year' in paper and paper['year'] is not None:
+                year = paper['year']
+            else:
+                year = 0
+            
+            print(HTML(f'<blue>\t{i + offset}:</blue> {paper["title"]}, {author}, {year}'), style=prompt_style)
             i += 1
         
         # prompt for which paper to view
