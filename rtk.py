@@ -235,7 +235,8 @@ def search_semantic_scholar_by_keyword():
             else:
                 year = 0
             
-            print(HTML(f'<blue>\t{i + offset}:</blue> {paper["title"]}, {author}, {year}'), style=prompt_style)
+            display_text = f'<blue>\t{i + offset}:</blue> {html.escape(paper["title"])}, {author}, {year}'
+            print(HTML(display_text), style=prompt_style)
             i += 1
         
         # prompt for which paper to view
