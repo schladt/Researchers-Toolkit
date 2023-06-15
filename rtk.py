@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from ratelimit import limits, RateLimitException
 from backoff import on_exception, expo
+from concurrent.futures import ProcessPoolExecutor
 
 # prompt_toolkit imports
 from prompt_toolkit import PromptSession
@@ -526,14 +527,19 @@ def search_semantic_refresh_references():
     records, _, _ = driver.execute_query(query_text)
     paper_ids = [record["p.PaperId"] for record in records]
     print(f"Found {len(paper_ids)} papers in the graph database", style=prompt_style)
-    for paper_id in tqdm(paper_ids):
-        add_references(paper_id, verbose=False)    
+
+    with ProcessPoolExecutor(10) as executor:
+        list(tqdm(executor.map(add_references, paper_ids), total=len(paper_ids)))
+
+
+    # for paper_id in tqdm(paper_ids):
+    #     add_references(paper_id, verbose=False)    
 
     print("Done!", style=prompt_style)
 
 @on_exception(expo, RateLimitException, max_tries=8)
 @limits(calls=5000, period=60)
-def add_references(paper_id, verbose=True):
+def add_references(paper_id, verbose=False):
     """
     Add citations and references to the graph database
     INPUT: paper_id - the id of the paper to add references for
@@ -607,7 +613,9 @@ def add_references(paper_id, verbose=True):
     if verbose:
         print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)      
 
-def add_paper_to_graph(paper, verbose=True, add_keywords=False):
+@on_exception(expo, RateLimitException, max_tries=8)
+@limits(calls=5000, period=60)
+def add_paper_to_graph(paper, verbose=False, add_keywords=False):
     """
     Add a paper to the graph database. Also adds authors, venues, and keywords along with relationships.
     INPUT: paper - Paper class object
