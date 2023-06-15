@@ -7,6 +7,10 @@ import os
 import requests
 import hashlib
 import html 
+from tqdm import tqdm
+
+from ratelimit import limits, RateLimitException
+from backoff import on_exception, expo
 
 # prompt_toolkit imports
 from prompt_toolkit import PromptSession
@@ -68,7 +72,7 @@ class Paper:
 
         # get primary author
         if 'authors' in paper_dict and len(paper_dict['authors']) > 0:
-            self.author = paper_dict['authors'][0]['name']
+            self.author = html.escape(paper_dict['authors'][0]['name'])
         else:
             self.author = "unknown"
 
@@ -84,7 +88,7 @@ class Paper:
             
             # add name
             if 'name' in author and author['name'] is not None:
-                author_name = author['name']
+                author_name = html.escape(author['name'])
             else:
                 author_name = "unknown"
 
@@ -104,7 +108,7 @@ class Paper:
             self.year = 0
         
         if 'venue' in paper_dict and paper_dict['venue'] is not None:
-            self.venue = paper_dict['venue']
+            self.venue = html.escape(paper_dict['venue'])
         else:
             self.venue = ""
         
@@ -113,7 +117,7 @@ class Paper:
         else:
             self.abstract = ""
         
-        if "tldr" in paper_dict and paper_dict['tldr'] is not None:
+        if "tldr" in paper_dict and paper_dict['tldr'] is not None and 'text' in paper_dict['tldr'] and paper_dict['tldr']['text'] is not None:
             self.tldr = html.escape(paper_dict['tldr']['text'])
         else:
             self.tldr = ""
@@ -160,6 +164,7 @@ def search_semantic_scholar():
         print("\t1. Search Semantic Scholar by keyword", style=prompt_style)
         print("\t2. Search Semantic Scholar by author", style=prompt_style)
         print("\t3. Search Semantic Scholar by Paper ID ", style=prompt_style)
+        print("\t4. Refresh references for all papers in database ", style=prompt_style)
         print("\t(anything else to return)", style=prompt_style)
 
         selection = prompt_session.prompt(prompt_text, style=prompt_style)
@@ -173,6 +178,9 @@ def search_semantic_scholar():
         elif selection == "3":
             paper_id = prompt_session.prompt(HTML("<blue>Enter paper ID: </blue>"), style=prompt_style)
             semantic_scholar_paper_context(paper_id)
+
+        elif selection == "4":
+            search_semantic_refresh_references()
             
         else:
             break
@@ -432,7 +440,7 @@ def semantic_scholar_author_context(author_id):
             # create paper node
             add_paper_to_graph(paper)
             # add citations and references
-            add_references(paper)
+            add_references(paper.id)
     else:
         pass
 
@@ -497,17 +505,38 @@ def semantic_scholar_paper_context(paper_id):
         add_paper_to_graph(paper)
 
         # add citations and references
-        add_references(paper)
+        add_references(paper.id)
     else:
         pass
 
     # close requests session
     requests_session.close()
 
-def add_references(paper):
+def search_semantic_refresh_references():
+    """Refresh the references for all papers in the graph database"""
+    global driver
+
+    print("Refreshing references for all papers in the graph database...", style=prompt_style)
+
+    # get all paper ids
+    query_text = (
+        "MATCH (p:Paper) "
+        "RETURN p.PaperId"
+    )
+    records, _, _ = driver.execute_query(query_text)
+    paper_ids = [record["p.PaperId"] for record in records]
+    print(f"Found {len(paper_ids)} papers in the graph database", style=prompt_style)
+    for paper_id in tqdm(paper_ids):
+        add_references(paper_id, verbose=False)    
+
+    print("Done!", style=prompt_style)
+
+@on_exception(expo, RateLimitException, max_tries=8)
+@limits(calls=5000, period=60)
+def add_references(paper_id, verbose=True):
     """
     Add citations and references to the graph database
-    INPUT: paper - Paper class object
+    INPUT: paper_id - the id of the paper to add references for
     """
     global driver
     requests_session = requests.Session()
@@ -520,7 +549,7 @@ def add_references(paper):
         references = [] # also used for citations
         offset = 0
         while (1):
-            url = f"https://api.semanticscholar.org/graph/v1/paper/{paper.id}/{operation}"
+            url = f"https://api.semanticscholar.org/graph/v1/paper/{paper_id}/{operation}"
             params = {
                 "fields": "title,authors,year,venue,paperId,abstract,url,citationCount,referenceCount",
                 "limit": 100,
@@ -550,7 +579,7 @@ def add_references(paper):
         for reference in references:
             if operation == "citations":
                 ref_paper = Paper(reference["citingPaper"])
-                add_paper_to_graph(ref_paper)
+                add_paper_to_graph(ref_paper, verbose=False)
 
                 # create relationship between paper and references
                 query_text = (
@@ -558,13 +587,13 @@ def add_references(paper):
                         "MATCH (r:Paper {PaperId: $refId}) "
                         "MERGE (p)<-[:REFERENCES]-(r)"
                     )
-                summary = driver.execute_query(query_text, paperId=paper.id, refId=ref_paper.id)
+                summary = driver.execute_query(query_text, paperId=paper_id, refId=ref_paper.id)
                 num_nodes += summary.summary.counters.nodes_created
                 num_relationships += summary.summary.counters.relationships_created   
 
             else:
                 ref_paper = Paper(reference["citedPaper"])
-                add_paper_to_graph(ref_paper)
+                add_paper_to_graph(ref_paper, verbose=False)
 
                 # create relationship between paper and references
                 query_text = (
@@ -572,13 +601,13 @@ def add_references(paper):
                         "MATCH (r:Paper {PaperId: $refId}) "
                         "MERGE (p)-[:REFERENCES]->(r)"
                     )
-                summary = driver.execute_query(query_text, paperId=paper.id, refId=ref_paper.id)
+                summary = driver.execute_query(query_text, paperId=paper_id, refId=ref_paper.id)
                 num_nodes += summary.summary.counters.nodes_created
                 num_relationships += summary.summary.counters.relationships_created
+    if verbose:
+        print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)      
 
-    print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)      
-
-def add_paper_to_graph(paper):
+def add_paper_to_graph(paper, verbose=True, add_keywords=False):
     """
     Add a paper to the graph database. Also adds authors, venues, and keywords along with relationships.
     INPUT: paper - Paper class object
@@ -587,8 +616,8 @@ def add_paper_to_graph(paper):
 
     num_nodes = 0
     num_relationships = 0
-
-    print("Adding paper to graph...", style=prompt_style)
+    if verbose:
+        print("Adding paper to graph...", style=prompt_style)
 
     # create paper node
     query_text = (
@@ -662,29 +691,31 @@ def add_paper_to_graph(paper):
         summary = driver.execute_query(query_text, name=paper.venue, paperId=paper.id)
         num_nodes += summary.summary.counters.nodes_created
         num_relationships += summary.summary.counters.relationships_created
-    
-    # create keyword nodes from abstract, title, and tldr
-    # tokenize the text
-    tokens = text_tokenization(paper.abstract + " " + paper.title + " " + paper.tldr)
 
-    # create keyword nodes and add relationships
-    for token in tokens:
-        query_text = (
-            "MERGE (k:Keyword {Value: $token}) "
-        )
-        summary = driver.execute_query(query_text, token=token)
-        num_nodes += summary.summary.counters.nodes_created
-        num_relationships += summary.summary.counters.relationships_created
-        query_text = (
-            "MATCH (k:Keyword {Value: $token}) "
-            "MATCH (p:Paper {PaperId: $paperId}) "
-            "MERGE (p)-[:HAS_KEYWORD]->(k) "
-        )
-        summary = driver.execute_query(query_text, token=token, paperId=paper.id)
-        num_nodes += summary.summary.counters.nodes_created
-        num_relationships += summary.summary.counters.relationships_created    
+    if add_keywords:    
+        # create keyword nodes from abstract, title, and tldr
+        # tokenize the text
+        tokens = text_tokenization(paper.abstract + " " + paper.title + " " + paper.tldr)
 
-    print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)
+        # create keyword nodes and add relationships
+        for token in tokens:
+            query_text = (
+                "MERGE (k:Keyword {Value: $token}) "
+            )
+            summary = driver.execute_query(query_text, token=token)
+            num_nodes += summary.summary.counters.nodes_created
+            num_relationships += summary.summary.counters.relationships_created
+            query_text = (
+                "MATCH (k:Keyword {Value: $token}) "
+                "MATCH (p:Paper {PaperId: $paperId}) "
+                "MERGE (p)-[:HAS_KEYWORD]->(k) "
+            )
+            summary = driver.execute_query(query_text, token=token, paperId=paper.id)
+            num_nodes += summary.summary.counters.nodes_created
+            num_relationships += summary.summary.counters.relationships_created    
+
+    if verbose:
+        print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)
 
 def text_tokenization(text):
     """
