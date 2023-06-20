@@ -493,6 +493,7 @@ def semantic_scholar_paper_context(paper_id):
     print(HTML("\n<blue>What would you like to do next?:</blue>"), style=prompt_style)
     print("\tEnter 'g' to add this paper to the graph")
     print(HTML("\tEnter 'a' to this paper along with citations and references to graph <red>WARNING: this may take a long time!</red>"), style=prompt_style)
+    print("\tTo add keywords, place 'k' after the selection (e.g. 'gk')")
     print("\tEnter 'q' to return to main menu")
     selection = prompt_session.prompt(prompt_text, style=prompt_style)
 
@@ -507,6 +508,15 @@ def semantic_scholar_paper_context(paper_id):
 
         # add citations and references
         add_references(paper.id)
+    elif selection.lower() == "gk":
+        # create paper node
+        add_paper_to_graph(paper, add_keywords=True)
+    elif selection.lower() == "ak":
+        # create paper node
+        add_paper_to_graph(paper, add_keywords=True)
+
+        # add citations and references
+        add_references(paper.id, add_keywords=True)
     else:
         pass
 
@@ -528,7 +538,7 @@ def search_semantic_refresh_references():
     paper_ids = [record["p.PaperId"] for record in records]
     print(f"Found {len(paper_ids)} papers in the graph database", style=prompt_style)
 
-    with ProcessPoolExecutor(10) as executor:
+    with ProcessPoolExecutor(4) as executor:
         list(tqdm(executor.map(add_references, paper_ids), total=len(paper_ids)))
 
 
@@ -538,8 +548,8 @@ def search_semantic_refresh_references():
     print("Done!", style=prompt_style)
 
 @on_exception(expo, RateLimitException, max_tries=8)
-@limits(calls=5000, period=60)
-def add_references(paper_id, verbose=False):
+@limits(calls=500, period=60)
+def add_references(paper_id, verbose=False, add_keywords=False):
     """
     Add citations and references to the graph database
     INPUT: paper_id - the id of the paper to add references for
@@ -585,7 +595,7 @@ def add_references(paper_id, verbose=False):
         for reference in references:
             if operation == "citations":
                 ref_paper = Paper(reference["citingPaper"])
-                add_paper_to_graph(ref_paper, verbose=False)
+                add_paper_to_graph(ref_paper, verbose=False, add_keywords=add_keywords)
 
                 # create relationship between paper and references
                 query_text = (
@@ -599,7 +609,7 @@ def add_references(paper_id, verbose=False):
 
             else:
                 ref_paper = Paper(reference["citedPaper"])
-                add_paper_to_graph(ref_paper, verbose=False)
+                add_paper_to_graph(ref_paper, verbose=False, add_keywords=add_keywords)
 
                 # create relationship between paper and references
                 query_text = (
@@ -614,7 +624,7 @@ def add_references(paper_id, verbose=False):
         print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)      
 
 @on_exception(expo, RateLimitException, max_tries=8)
-@limits(calls=5000, period=60)
+@limits(calls=500, period=60)
 def add_paper_to_graph(paper, verbose=False, add_keywords=False):
     """
     Add a paper to the graph database. Also adds authors, venues, and keywords along with relationships.
