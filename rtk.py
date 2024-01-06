@@ -592,7 +592,7 @@ def add_references(paper_id, verbose=False, add_keywords=False):
             offset += 100
 
         # add each reference to the graph and create relationship
-        for reference in references:
+        for reference in tqdm(references, desc=f"Adding {operation} to graph"):
             if operation == "citations":
                 ref_paper = Paper(reference["citingPaper"])
                 add_paper_to_graph(ref_paper, verbose=False, add_keywords=add_keywords)
