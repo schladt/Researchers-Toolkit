@@ -547,12 +547,8 @@ def search_semantic_refresh_references():
     paper_ids = [record["p.PaperId"] for record in records]
     print(f"Found {len(paper_ids)} papers in the graph database", style=prompt_style)
 
-    with ProcessPoolExecutor(4) as executor:
-        list(tqdm(executor.map(add_references, paper_ids), total=len(paper_ids)))
-
-
-    # for paper_id in tqdm(paper_ids):
-    #     add_references(paper_id, verbose=False)    
+    for paper_id in tqdm(paper_ids):
+        add_references(paper_id, verbose=False)    
 
     print("Done!", style=prompt_style)
 
