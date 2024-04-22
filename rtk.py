@@ -198,18 +198,27 @@ def search_semantic_scholar_by_keyword():
     print(HTML("<blue>What keyword(s) would you like to search?</blue>"), style=prompt_style)
     keyword = prompt_session.prompt(prompt_text, style=prompt_style)
 
+    print(HTML("<blue>What field of study would you like to search (default='Computer Science')?: </blue>"), style=prompt_style)
+    field_of_study = prompt_session.prompt(prompt_text, style=prompt_style)
+    if field_of_study == "":
+        field_of_study = "Computer Science"
+    else:
+        field_of_study = field_of_study.capitalize()
+    fields_of_study = field_of_study.split(",")
+
     print(f"Searching Semantic Scholar for '{keyword}'...", style=prompt_style)
 
     offset = 0
-    limit = 10 
+    limit = 10
     requests_session = requests.Session()
     while (1):
         url = "https://api.semanticscholar.org/graph/v1/paper/search"
         params = {
             "query": keyword,
             "offset": offset,
-            "fields": "title,authors,year,paperId",
-            "limit": limit,  
+            "fields": "title,authors,year,paperId,fieldsOfStudy",
+            "fieldsOfStudy": fields_of_study,
+            "limit": limit
         }
         # add headers
         headers = {
