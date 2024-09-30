@@ -1,9 +1,11 @@
 """
 Researcher's Toolkit
-Mike Schladt - 2023
+Mike Schladt - 2024
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import requests
 import hashlib
 import html 
@@ -851,7 +853,7 @@ def main():
     x_api_key = os.environ.get("S2_API_KEY")
 
     # connect to neo4j database
-    driver = GraphDatabase.driver(neo4j_url, auth=("neo4j", neo4j_password))
+    driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password))
     try:
         driver.verify_connectivity()
     except Exception as e:
