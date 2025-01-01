@@ -846,7 +846,7 @@ def main():
         exit()
     neo4j_url = os.environ.get("NEO4J_URL")
     if neo4j_url is None:
-        print(HTML('<red>ERROR: NEO4J_CONNECTION_STRING environment variable not set</red>'), style=prompt_style)
+        print(HTML('<red>ERROR: NEO4J_URL environment variable not set</red>'), style=prompt_style)
         exit()
     
     # get semantic scholar api key from environment variable
