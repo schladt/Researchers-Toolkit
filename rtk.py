@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()
 import requests
 import hashlib
-import html 
+import html
+import time
 from tqdm import tqdm
 
 from ratelimit import limits, RateLimitException
@@ -43,6 +44,7 @@ prompt_style = Style.from_dict({
 
 driver = None
 x_api_key = None
+project_tags = []
 
 # paper class
 class Paper:
@@ -155,6 +157,7 @@ class Paper:
 def search_semantic_scholar():
     """Search Semantic Scholar for a paper"""
 
+    global project_tags
 
     context_path = "(Semantic Scholar)"
     prompt_text = [
@@ -168,6 +171,8 @@ def search_semantic_scholar():
         print("\t2. Search Semantic Scholar by author", style=prompt_style)
         print("\t3. Search Semantic Scholar by Paper ID ", style=prompt_style)
         print("\t4. Refresh references for all papers in database ", style=prompt_style)
+        print(HTML(f"\t5. Set tags (current tags: <blue>{project_tags}</blue>)"), style=prompt_style)
+        print()
         print("\t(anything else to return)", style=prompt_style)
 
         selection = prompt_session.prompt(prompt_text, style=prompt_style)
@@ -184,7 +189,11 @@ def search_semantic_scholar():
 
         elif selection == "4":
             search_semantic_refresh_references()
-            
+        
+        elif selection == "5":
+            project_tag_r = prompt_session.prompt(HTML("<blue>Enter project tags (comma separated): </blue>"), style=prompt_style)
+            project_tags = project_tag_r.split(",")
+            project_tags = [tag.strip() for tag in project_tags]
         else:
             break
 
@@ -571,6 +580,7 @@ def add_references(paper_id, verbose=False, add_keywords=False):
     for operation in ["citations", "references"]:
         references = [] # also used for citations
         offset = 0
+        print(f"Getting {operation} for paper {paper_id}...", style=prompt_style)
         while (1):
             url = f"https://api.semanticscholar.org/graph/v1/paper/{paper_id}/{operation}"
             params = {
@@ -597,7 +607,8 @@ def add_references(paper_id, verbose=False, add_keywords=False):
                 break    
 
             offset += 100
-
+            print(f"Getting {operation} for paper {paper_id}, recieved {offset} results, fetching next batch...", style=prompt_style)
+            time.sleep(1)
         # add each reference to the graph and create relationship
         for reference in tqdm(references, desc=f"Adding {operation} to graph"):
             if operation == "citations":
@@ -638,6 +649,7 @@ def add_paper_to_graph(paper, verbose=False, add_keywords=False):
     INPUT: paper - Paper class object
     """
     global driver
+    global project_tag
 
     num_nodes = 0
     num_relationships = 0
@@ -673,6 +685,25 @@ def add_paper_to_graph(paper, verbose=False, add_keywords=False):
     num_nodes += summary.summary.counters.nodes_created
     num_relationships += summary.summary.counters.relationships_created
 
+    # add project tag node
+    for project_tag in project_tags:
+        query_text = (
+            "MERGE (t:Tag {Tag: $tag}) "
+        )
+        summary = driver.execute_query(query_text, tag=project_tag)
+        num_nodes += summary.summary.counters.nodes_created
+        num_relationships += summary.summary.counters.relationships_created
+
+        query_text = (
+            "MATCH (p:Paper {PaperId: $paperId}) "
+            "MATCH (t:Tag {Tag: $tag}) "
+            "MERGE (p)-[:TAGGED]->(t) "
+        )
+        summary = driver.execute_query(query_text, paperId=paper.id, tag=project_tag)
+        num_nodes += summary.summary.counters.nodes_created
+        num_relationships += summary.summary.counters.relationships_created
+
+
     # create author nodes and relationship to paper
     for author in paper.authors:
         author_id = author["id"]
@@ -699,6 +730,17 @@ def add_paper_to_graph(paper, verbose=False, add_keywords=False):
         num_nodes += summary.summary.counters.nodes_created
         num_relationships += summary.summary.counters.relationships_created
 
+        # add author to project tag
+        for project_tag in project_tags:
+            query_text = (
+                "MATCH (a:Author {AuthorId: $authorId}) "
+                "MATCH (t:Tag {Tag: $tag}) "
+                "MERGE (a)-[:TAGGED]->(t) "
+            )
+            summary = driver.execute_query(query_text, authorId=author_id, tag=project_tag)
+            num_nodes += summary.summary.counters.nodes_created
+            num_relationships += summary.summary.counters.relationships_created
+
     # create venue node and relationship to paper
     if paper.venue != "":
         query_text = (
@@ -716,6 +758,17 @@ def add_paper_to_graph(paper, verbose=False, add_keywords=False):
         summary = driver.execute_query(query_text, name=paper.venue, paperId=paper.id)
         num_nodes += summary.summary.counters.nodes_created
         num_relationships += summary.summary.counters.relationships_created
+
+        # add venue to project tag
+        for project_tag in project_tags:
+            query_text = (
+                "MATCH (v:Venue {Name: $name}) "
+                "MATCH (t:Tag {Tag: $tag}) "
+                "MERGE (v)-[:TAGGED]->(t) "
+            )
+            summary = driver.execute_query(query_text, name=paper.venue, tag=project_tag)
+            num_nodes += summary.summary.counters.nodes_created
+            num_relationships += summary.summary.counters.relationships_created
 
     if add_keywords:    
         # create keyword nodes from abstract, title, and tldr
