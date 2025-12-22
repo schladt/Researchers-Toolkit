@@ -512,8 +512,10 @@ def semantic_scholar_paper_context(paper_id):
     ]
     print(HTML("\n<blue>What would you like to do next?:</blue>"), style=prompt_style)
     print("\tEnter 'g' to add this paper to the graph")
-    print(HTML("\tEnter 'a' to this paper along with citations and references to graph <red>WARNING: this may take a long time!</red>"), style=prompt_style)
-    print("\tTo add keywords, place 'k' after the selection (e.g. 'gk')")
+    print(HTML("\tEnter 'a' to add this paper along with citations and references to graph <red>WARNING: this may take a long time!</red>"), style=prompt_style)
+    print(HTML("\tEnter 'c' to add this paper along with <u>citations only</u> to graph"), style=prompt_style)
+    print(HTML("\tEnter 'r' to add this paper along with <u>references only</u> to graph"), style=prompt_style)
+    print("\tTo add keywords, place 'k' after the selection (e.g. 'gk', 'ck', 'rk')")
     print("\tEnter 'q' to return to main menu")
     selection = prompt_session.prompt(prompt_text, style=prompt_style)
 
@@ -528,6 +530,18 @@ def semantic_scholar_paper_context(paper_id):
 
         # add citations and references
         add_references(paper.id)
+    elif selection.lower() == "c":
+        # create paper node
+        add_paper_to_graph(paper)
+
+        # add citations only
+        add_references(paper.id, operations=["citations"])
+    elif selection.lower() == "r":
+        # create paper node
+        add_paper_to_graph(paper)
+
+        # add references only
+        add_references(paper.id, operations=["references"])
     elif selection.lower() == "gk":
         # create paper node
         add_paper_to_graph(paper, add_keywords=True)
@@ -537,6 +551,18 @@ def semantic_scholar_paper_context(paper_id):
 
         # add citations and references
         add_references(paper.id, add_keywords=True)
+    elif selection.lower() == "ck":
+        # create paper node
+        add_paper_to_graph(paper, add_keywords=True)
+
+        # add citations only
+        add_references(paper.id, add_keywords=True, operations=["citations"])
+    elif selection.lower() == "rk":
+        # create paper node
+        add_paper_to_graph(paper, add_keywords=True)
+
+        # add references only
+        add_references(paper.id, add_keywords=True, operations=["references"])
     else:
         pass
 
@@ -565,10 +591,14 @@ def search_semantic_refresh_references():
 
 @on_exception(expo, RateLimitException, max_tries=8)
 @limits(calls=500, period=60)
-def add_references(paper_id, verbose=False, add_keywords=False):
+def add_references(paper_id, verbose=False, add_keywords=False, operations=None):
     """
-    Add citations and references to the graph database
-    INPUT: paper_id - the id of the paper to add references for
+    Add citations and/or references to the graph database
+    INPUT: 
+        paper_id - the id of the paper to add references for
+        verbose - whether to print verbose output
+        add_keywords - whether to add keywords to the papers
+        operations - list of operations to perform: ["citations", "references"] or subset. Default is both.
     """
     global driver
     requests_session = requests.Session()
@@ -576,8 +606,12 @@ def add_references(paper_id, verbose=False, add_keywords=False):
     num_nodes = 0
     num_relationships = 0
 
+    # default to both operations if not specified
+    if operations is None:
+        operations = ["citations", "references"]
+
     # get references for paper
-    for operation in ["citations", "references"]:
+    for operation in operations:
         references = [] # also used for citations
         offset = 0
         print(f"Getting {operation} for paper {paper_id}...", style=prompt_style)
@@ -600,10 +634,25 @@ def add_references(paper_id, verbose=False, add_keywords=False):
                 break
 
             # add the references to the list
-            references.extend(response.json()["data"])
+            response_json = response.json()
+            response_data = response_json.get("data")
+            if response_data is None:
+                # Check if there's a disclaimer about restricted access
+                if "citingPaperInfo" in response_json:
+                    paper_info = response_json.get("citingPaperInfo", {})
+                    pdf_info = paper_info.get("openAccessPdf", {})
+                    disclaimer = pdf_info.get("disclaimer", "")
+                    if "elided by the publisher" in disclaimer:
+                        print(HTML(f"<red>Note: {operation.capitalize()} are restricted by the publisher for this paper.</red>"), style=prompt_style)
+                    else:
+                        print(HTML(f"<red>No {operation} data available for paper {paper_id}</red>"), style=prompt_style)
+                else:
+                    print(HTML(f"<red>No {operation} data available for paper {paper_id}</red>"), style=prompt_style)
+                break
+            references.extend(response_data)
 
             # check if there are more references
-            if 'next' not in response.json():
+            if 'next' not in response_json:
                 break    
 
             offset += 100
@@ -611,33 +660,38 @@ def add_references(paper_id, verbose=False, add_keywords=False):
             time.sleep(1)
         # add each reference to the graph and create relationship
         for reference in tqdm(references, desc=f"Adding {operation} to graph"):
-            if operation == "citations":
-                ref_paper = Paper(reference["citingPaper"])
-                add_paper_to_graph(ref_paper, verbose=False, add_keywords=add_keywords)
+            try:
+                if operation == "citations":
+                    ref_paper = Paper(reference["citingPaper"])
+                    add_paper_to_graph(ref_paper, verbose=False, add_keywords=add_keywords)
 
-                # create relationship between paper and references
-                query_text = (
-                        "MATCH (p:Paper {PaperId: $paperId}) "
-                        "MATCH (r:Paper {PaperId: $refId}) "
-                        "MERGE (p)<-[:REFERENCES]-(r)"
-                    )
-                summary = driver.execute_query(query_text, paperId=paper_id, refId=ref_paper.id)
-                num_nodes += summary.summary.counters.nodes_created
-                num_relationships += summary.summary.counters.relationships_created   
+                    # create relationship between paper and references
+                    query_text = (
+                            "MATCH (p:Paper {PaperId: $paperId}) "
+                            "MATCH (r:Paper {PaperId: $refId}) "
+                            "MERGE (p)<-[:REFERENCES]-(r)"
+                        )
+                    summary = driver.execute_query(query_text, paperId=paper_id, refId=ref_paper.id)
+                    num_nodes += summary.summary.counters.nodes_created
+                    num_relationships += summary.summary.counters.relationships_created   
 
-            else:
-                ref_paper = Paper(reference["citedPaper"])
-                add_paper_to_graph(ref_paper, verbose=False, add_keywords=add_keywords)
+                else:
+                    ref_paper = Paper(reference["citedPaper"])
+                    add_paper_to_graph(ref_paper, verbose=False, add_keywords=add_keywords)
 
-                # create relationship between paper and references
-                query_text = (
-                        "MATCH (p:Paper {PaperId: $paperId}) "
-                        "MATCH (r:Paper {PaperId: $refId}) "
-                        "MERGE (p)-[:REFERENCES]->(r)"
-                    )
-                summary = driver.execute_query(query_text, paperId=paper_id, refId=ref_paper.id)
-                num_nodes += summary.summary.counters.nodes_created
-                num_relationships += summary.summary.counters.relationships_created
+                    # create relationship between paper and references
+                    query_text = (
+                            "MATCH (p:Paper {PaperId: $paperId}) "
+                            "MATCH (r:Paper {PaperId: $refId}) "
+                            "MERGE (p)-[:REFERENCES]->(r)"
+                        )
+                    summary = driver.execute_query(query_text, paperId=paper_id, refId=ref_paper.id)
+                    num_nodes += summary.summary.counters.nodes_created
+                    num_relationships += summary.summary.counters.relationships_created
+            except (KeyError, TypeError) as e:
+                # Skip this reference if it's missing required data
+                print(f"Skipping reference due to error: {e}", style=prompt_style)
+                continue
     if verbose:
         print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)      
 
@@ -915,7 +969,12 @@ def main():
     print(HTML('<green>Connected to database!</green>'), style=prompt_style)
 
     # call main menu
-    main_menu()
+    try:
+        main_menu()
+    finally:
+        # close the database connection
+        if driver:
+            driver.close()
 
 if __name__ == "__main__":
     main()
