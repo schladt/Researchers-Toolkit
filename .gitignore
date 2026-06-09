@@ -162,3 +162,8 @@ cython_debug/
 
 
 tmp_*
+
+# AI memory files
+memory-bank/
+AGENTS.md
+CLAUDE.md
