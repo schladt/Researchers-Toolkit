@@ -46,6 +46,15 @@ driver = None
 x_api_key = None
 project_tags = []
 
+@on_exception(expo, RateLimitException, max_tries=8)
+@limits(calls=1, period=1)
+def s2_api_get(session, url, params, headers):
+    """Rate-limited wrapper for all Semantic Scholar API GET requests (1 req/sec)."""
+    response = session.get(url, params=params, headers=headers)
+    if response.status_code == 429:
+        raise RateLimitException("API returned 429", period_remaining=1)
+    return response
+
 # paper class
 class Paper:
     """
@@ -235,11 +244,11 @@ def search_semantic_scholar_by_keyword():
         headers = {
             "x-api-key": x_api_key,
         }
-        response = requests_session.get(url, params=params, headers=headers)
+        response = s2_api_get(requests_session, url, params, headers)
 
         # check for 200 response
         if response.status_code != 200:
-            print(f"Error: {response.status_code} - {response.reason}", style=prompt_style)
+            print(f"Error: {response.status_code} - {response.reason} - {response.text}", style=prompt_style)
             break
 
         # check for no results
@@ -336,11 +345,11 @@ def search_semantic_scholar_by_author():
         headers = {
             "x-api-key": x_api_key,
         }
-        response = requests_session.get(url, params=params, headers=headers)
+        response = s2_api_get(requests_session, url, params, headers)
 
         # check for 200 response
         if response.status_code != 200:
-            print(f"Error: {response.status_code} - {response.reason}", style=prompt_style)
+            print(f"Error: {response.status_code} - {response.reason} - {response.text}", style=prompt_style)
             break
 
         # check for no results
@@ -416,11 +425,11 @@ def semantic_scholar_author_context(author_id):
         "x-api-key": x_api_key,
     }
     print(url)
-    response = requests_session.get(url, params=params, headers=headers)
+    response = s2_api_get(requests_session, url, params, headers)
 
     # check for 200 response
     if response.status_code != 200:
-        print(f"Error: {response.status_code} - {response.reason}", style=prompt_style)
+        print(f"Error: {response.status_code} - {response.reason} - {response.text}", style=prompt_style)
         # close requests session
         requests_session.close()
         return
@@ -479,11 +488,11 @@ def semantic_scholar_paper_context(paper_id):
     headers = {
         "x-api-key": x_api_key,
     }
-    response = requests_session.get(url, params=params, headers=headers)
+    response = s2_api_get(requests_session, url, params, headers)
 
     # check for 200 response
     if response.status_code != 200:
-        print(f"Error: {response.status_code} - {response.reason}", style=prompt_style)
+        print(f"Error: {response.status_code} - {response.reason} - {response.text}", style=prompt_style)
         # close requests session
         requests_session.close()
         return
@@ -589,8 +598,6 @@ def search_semantic_refresh_references():
 
     print("Done!", style=prompt_style)
 
-@on_exception(expo, RateLimitException, max_tries=8)
-@limits(calls=500, period=60)
 def add_references(paper_id, verbose=False, add_keywords=False, operations=None):
     """
     Add citations and/or references to the graph database
@@ -626,11 +633,11 @@ def add_references(paper_id, verbose=False, add_keywords=False, operations=None)
             headers = {
                 "x-api-key": x_api_key,
             }
-            response = requests_session.get(url, params=params, headers=headers)
+            response = s2_api_get(requests_session, url, params, headers)
 
             # check if the response is valid
             if response.status_code != 200:
-                print(response.json())
+                print(f"Error: {response.status_code} - {response.reason} - {response.text}", style=prompt_style)
                 break
 
             # add the references to the list
@@ -695,8 +702,6 @@ def add_references(paper_id, verbose=False, add_keywords=False, operations=None)
     if verbose:
         print(f"Added {num_nodes} nodes and {num_relationships} relationships to the graph!", style=prompt_style)      
 
-@on_exception(expo, RateLimitException, max_tries=8)
-@limits(calls=500, period=60)
 def add_paper_to_graph(paper, verbose=False, add_keywords=False):
     """
     Add a paper to the graph database. Also adds authors, venues, and keywords along with relationships.
