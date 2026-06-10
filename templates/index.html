@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Researcher's Toolkit</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+
+    <!-- Cytoscape.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+
+    <!-- xterm.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <!-- App styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="container">
+        <div id="console-panel">
+            <div id="console-header">
+                <span class="panel-title">Console</span>
+            </div>
+            <div id="terminal"></div>
+        </div>
+        <div id="divider"></div>
+        <div id="graph-panel">
+            <div id="graph-header">
+                <span class="panel-title">Local Graph</span>
+                <div id="graph-search">
+                    <input type="text" id="search-input" placeholder="Search nodes..." autocomplete="off">
+                    <button id="search-btn" class="toolbar-btn" title="Search database for nodes matching your query and add them to the graph">&#x1F50D;</button>
+                    <button id="cypher-toggle" class="toolbar-btn" title="Open Cypher query bar for advanced Neo4j queries">&#x276F;_</button>
+                    <button id="legend-toggle" class="toolbar-btn" title="Show or hide the node/edge type legend">&#x25C9;</button>
+                    <button id="view-toggle" class="toolbar-btn" title="Switch between graph visualization and table view">&#x2637;</button>
+                </div>
+                <div id="graph-controls">
+                    <span id="graph-info"></span>
+                    <label class="layout-label" title="Choose how nodes are arranged in the graph">Layout
+                        <select id="layout-select">
+                            <option value="cose">Force</option>
+                            <option value="breadthfirst">Tree</option>
+                            <option value="concentric">Concentric</option>
+                            <option value="circle">Circle</option>
+                            <option value="grid">Grid</option>
+                        </select>
+                    </label>
+                    <button id="export-btn" class="toolbar-btn" title="Download the current graph view as a PNG image">Export</button>
+                    <button id="clear-btn" class="toolbar-btn" title="Remove all nodes and edges from the current view">Clear</button>
+                </div>
+            </div>
+            <div id="cypher-bar" class="hidden">
+                <input type="text" id="cypher-input" placeholder="MATCH (n) RETURN n LIMIT 25" autocomplete="off">
+                <button id="cypher-run" class="toolbar-btn" title="Execute the Cypher query and display results in the graph">Run</button>
+            </div>
+            <div id="graph-container">
+                <div id="cy"></div>
+                <div id="graph-legend" class="hidden">
+                    <div class="legend-title">Legend</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#5b9bd5"></span>Paper</div>
+                    <div class="legend-item"><span class="legend-dot legend-diamond" style="background:#4db6ac"></span>Author</div>
+                    <div class="legend-item"><span class="legend-dot legend-rect" style="background:#e8a838"></span>Venue</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#607d8b; width:8px; height:8px"></span>Keyword</div>
+                    <div class="legend-item"><span class="legend-dot legend-hex" style="background:#9575cd"></span>Tag</div>
+                    <div class="legend-sep"></div>
+                    <div class="legend-item"><span class="legend-line legend-solid"></span>References</div>
+                    <div class="legend-item"><span class="legend-line legend-dashed"></span>Authored by</div>
+                    <div class="legend-item"><span class="legend-line legend-dotted"></span>Published in</div>
+                </div>
+            </div>
+            <div id="table-view" class="hidden">
+                <div id="table-placeholder">
+                    <p>Search results will appear here as a table.</p>
+                    <p class="hint">Use the search bar or console to find papers.</p>
+                </div>
+                <div id="table-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App scripts -->
+    <script src="{{ url_for('static', filename='js/graph.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
