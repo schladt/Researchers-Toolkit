@@ -123,7 +123,13 @@ function initGraph() {
                     'target-arrow-shape': 'triangle',
                     'curve-style': 'bezier',
                     'arrow-scale': 0.8,
-                    'opacity': 0.7
+                    'opacity': 0.7,
+                    'label': 'data(type)',
+                    'font-size': '0px',
+                    'text-rotation': 'autorotate',
+                    'color': '#5580a8',
+                    'text-opacity': 0.8,
+                    'text-margin-y': -8
                 }
             },
             // AUTHORED_BY edges - teal dashed
@@ -135,7 +141,13 @@ function initGraph() {
                     'line-style': 'dashed',
                     'target-arrow-shape': 'none',
                     'curve-style': 'bezier',
-                    'opacity': 0.5
+                    'opacity': 0.5,
+                    'label': 'data(type)',
+                    'font-size': '0px',
+                    'text-rotation': 'autorotate',
+                    'color': '#4db6ac',
+                    'text-opacity': 0.7,
+                    'text-margin-y': -8
                 }
             },
             // PUBLISHED_IN edges - amber dotted
@@ -147,7 +159,13 @@ function initGraph() {
                     'line-style': 'dotted',
                     'target-arrow-shape': 'none',
                     'curve-style': 'bezier',
-                    'opacity': 0.5
+                    'opacity': 0.5,
+                    'label': 'data(type)',
+                    'font-size': '0px',
+                    'text-rotation': 'autorotate',
+                    'color': '#e8a838',
+                    'text-opacity': 0.7,
+                    'text-margin-y': -8
                 }
             },
             // Default edge style
@@ -159,7 +177,13 @@ function initGraph() {
                     'target-arrow-color': '#4a4a4a',
                     'target-arrow-shape': 'none',
                     'curve-style': 'bezier',
-                    'opacity': 0.5
+                    'opacity': 0.5,
+                    'label': 'data(type)',
+                    'font-size': '0px',
+                    'text-rotation': 'autorotate',
+                    'color': '#888',
+                    'text-opacity': 0.7,
+                    'text-margin-y': -8
                 }
             }
         ],
@@ -239,7 +263,6 @@ function loadGraph() {
 
 function clearGraph() {
     cy.elements().remove();
-    localStorage.removeItem('rtk-graph');
     updateGraphInfo();
     if (term) {
         term.write('\r\n\x1b[32mGraph cleared.\x1b[0m\r\n');
@@ -251,16 +274,25 @@ function expandNeighbors(nodeId) {
     fetch('/api/graph/neighbors/' + encodeURIComponent(nodeId))
         .then(function (res) { return res.json(); })
         .then(function (data) {
-            // Add only new elements
+            // Add only new nodes
             var existingIds = new Set(cy.nodes().map(function (n) { return n.id(); }));
             var newNodes = data.nodes.filter(function (n) { return !existingIds.has(n.data.id); });
             hideGraphBanner();
             cy.add(newNodes);
-            cy.add(data.edges.filter(function (e) {
+
+            // Add only new edges (dedup by source+target+type)
+            var existingEdges = new Set();
+            cy.edges().forEach(function (e) {
+                existingEdges.add(e.data('source') + '|' + e.data('target') + '|' + e.data('type'));
+            });
+            var newEdges = data.edges.filter(function (e) {
+                var key = e.data.source + '|' + e.data.target + '|' + e.data.type;
+                if (existingEdges.has(key)) return false;
                 // Only add edges where both endpoints exist
                 return cy.getElementById(e.data.source).length > 0 &&
                        cy.getElementById(e.data.target).length > 0;
-            }));
+            });
+            cy.add(newEdges);
             runLayout();
             updateGraphInfo();
         });
@@ -476,4 +508,14 @@ function hideTooltip() {
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// --- Edge label toggle ---
+
+var edgeLabelsVisible = false;
+
+function toggleEdgeLabels() {
+    edgeLabelsVisible = !edgeLabelsVisible;
+    if (!cy) return;
+    cy.edges().style('font-size', edgeLabelsVisible ? '8px' : '0px');
 }

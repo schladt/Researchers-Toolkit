@@ -18,6 +18,17 @@ class CommandHandler:
         self._last_offset = 0
         self._last_total = 0
         self._limit = 10
+        self._field_of_study = None  # None = all fields
+
+    # Valid Semantic Scholar fieldsOfStudy values
+    VALID_FIELDS_OF_STUDY = [
+        "Computer Science", "Medicine", "Chemistry", "Biology",
+        "Materials Science", "Physics", "Geology", "Psychology",
+        "Art", "History", "Geography", "Sociology", "Business",
+        "Political Science", "Economics", "Philosophy", "Mathematics",
+        "Engineering", "Environmental Science",
+        "Agricultural and Food Sciences", "Education", "Law", "Linguistics",
+    ]
 
     def handle(self, command_str, emit):
         """
@@ -51,6 +62,8 @@ class CommandHandler:
             self._set_tags(args, emit)
         elif cmd == "graph":
             self._graph_cmd(args, emit)
+        elif cmd == "field":
+            self._set_field(args, emit)
         elif cmd == "status":
             self._status(emit)
         else:
@@ -61,6 +74,8 @@ class CommandHandler:
         emit("")
         emit("\x1b[1;36mResearcher's Toolkit — Commands\x1b[0m")
         emit("  \x1b[33msearch <keywords>\x1b[0m      Search papers by keyword")
+        emit("  \x1b[33mfield [name|clear]\x1b[0m     Set/clear field-of-study filter")
+        emit("                          type 'field help' for valid options")
         emit("  \x1b[33mauthor <name>\x1b[0m          Search authors by name")
         emit("  \x1b[33mpaper <id>\x1b[0m             Show paper details by ID")
         emit("  \x1b[33mselect <#>\x1b[0m             Select item from last search results")
@@ -77,13 +92,59 @@ class CommandHandler:
         emit("  \x1b[33mstatus\x1b[0m                 Show connection status and current tags")
         emit("")
 
+    def _set_field(self, args, emit):
+        """Set, clear, or show help for the field-of-study filter."""
+        arg = args.strip()
+
+        if not arg:
+            if self._field_of_study:
+                emit(f"Current field-of-study filter: \x1b[36m{self._field_of_study}\x1b[0m")
+            else:
+                emit("No field-of-study filter set (searching all fields).")
+            emit("Type \x1b[33mfield help\x1b[0m to see valid options.")
+            return
+
+        if arg.lower() == "help":
+            emit("")
+            emit("\x1b[1;36mValid fields of study:\x1b[0m")
+            for f in self.VALID_FIELDS_OF_STUDY:
+                emit(f"  \x1b[33m{f}\x1b[0m")
+            emit("")
+            emit("Usage:")
+            emit("  \x1b[33mfield Computer Science\x1b[0m   Set filter")
+            emit("  \x1b[33mfield clear\x1b[0m              Remove filter")
+            emit("  \x1b[33mfield\x1b[0m                    Show current filter")
+            return
+
+        if arg.lower() == "clear":
+            self._field_of_study = None
+            emit("Field-of-study filter cleared. Searches will include all fields.")
+            return
+
+        # Case-insensitive match against valid fields
+        match = None
+        for f in self.VALID_FIELDS_OF_STUDY:
+            if f.lower() == arg.lower():
+                match = f
+                break
+
+        if match:
+            self._field_of_study = match
+            emit(f"Field-of-study filter set to: \x1b[36m{match}\x1b[0m")
+        else:
+            emit(f"\x1b[31mInvalid field of study: '{arg}'\x1b[0m")
+            emit("Type \x1b[33mfield help\x1b[0m for valid options.")
+
     def _search_papers(self, keyword, emit):
         if not keyword:
             emit("\x1b[31mUsage: search <keywords>\x1b[0m")
             return
 
-        emit(f"Searching for '{keyword}'...")
-        results, total = self.core.search_papers(keyword, offset=0, limit=self._limit)
+        if self._field_of_study:
+            emit(f"Searching for '{keyword}' in {self._field_of_study}...")
+        else:
+            emit(f"Searching for '{keyword}'...")
+        results, total = self.core.search_papers(keyword, field_of_study=self._field_of_study, offset=0, limit=self._limit)
 
         if results is None:
             emit(f"\x1b[31m{total}\x1b[0m")  # total contains error string
@@ -176,7 +237,7 @@ class CommandHandler:
 
         self._last_offset = new_offset
         if self._last_result_type == "papers":
-            results, total = self.core.search_papers(self._last_query, offset=new_offset, limit=self._limit)
+            results, total = self.core.search_papers(self._last_query, field_of_study=self._field_of_study, offset=new_offset, limit=self._limit)
             if results is None:
                 emit(f"\x1b[31m{total}\x1b[0m")
                 return
@@ -207,7 +268,7 @@ class CommandHandler:
 
         self._last_offset = new_offset
         if self._last_result_type == "papers":
-            results, total = self.core.search_papers(self._last_query, offset=new_offset, limit=self._limit)
+            results, total = self.core.search_papers(self._last_query, field_of_study=self._field_of_study, offset=new_offset, limit=self._limit)
             if results is None:
                 emit(f"\x1b[31m{total}\x1b[0m")
                 return
@@ -289,11 +350,8 @@ class CommandHandler:
 
     def _status(self, emit):
         emit("\x1b[1;36mStatus\x1b[0m")
-        try:
-            self.core.driver.verify_connectivity()
-            emit("  Neo4j: \x1b[32mconnected\x1b[0m")
-        except Exception:
-            emit("  Neo4j: \x1b[31mdisconnected\x1b[0m")
+        stats = self.core.graph.stats()
+        emit(f"  Graph: \x1b[32m{stats['total_nodes']} nodes, {stats['total_edges']} edges\x1b[0m")
         emit(f"  API Key: {'set' if self.core.x_api_key else 'not set'}")
         emit(f"  Tags: {', '.join(self.core.project_tags) if self.core.project_tags else '(none)'}")
 

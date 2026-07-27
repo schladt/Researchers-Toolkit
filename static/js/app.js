@@ -15,7 +15,6 @@ document.addEventListener('DOMContentLoaded', function () {
     initGraphControls();
 
     // Always start with 10-node preview
-    localStorage.removeItem('rtk-graph');
     loadPreview();
 
     // Styled tooltips for toolbar buttons
@@ -96,20 +95,23 @@ function initDivider() {
     });
 }
 
-// Graph search bar + Cypher mode
+// Graph search bar + Filter mode
 function initGraphSearch() {
     var searchInput = document.getElementById('search-input');
     var searchBtn = document.getElementById('search-btn');
-    var cypherToggle = document.getElementById('cypher-toggle');
-    var cypherBar = document.getElementById('cypher-bar');
-    var cypherInput = document.getElementById('cypher-input');
-    var cypherRun = document.getElementById('cypher-run');
+    var filterToggle = document.getElementById('filter-toggle');
+    var filterBar = document.getElementById('filter-bar');
+    var filterRun = document.getElementById('filter-run');
     var clearBtn = document.getElementById('clear-btn');
     var legendToggle = document.getElementById('legend-toggle');
     var legend = document.getElementById('graph-legend');
+    var edgeLabelToggle = document.getElementById('edge-label-toggle');
     var viewToggle = document.getElementById('view-toggle');
     var graphContainer = document.getElementById('graph-container');
     var tableView = document.getElementById('table-view');
+    var saveBtn = document.getElementById('save-btn');
+    var loadBtn = document.getElementById('load-btn');
+    var loadFileInput = document.getElementById('load-file-input');
 
     // Search on Enter or click
     searchBtn.addEventListener('click', function () {
@@ -121,12 +123,12 @@ function initGraphSearch() {
         }
     });
 
-    // Toggle Cypher bar
-    cypherToggle.addEventListener('click', function () {
-        cypherBar.classList.toggle('hidden');
-        cypherToggle.classList.toggle('active');
-        if (!cypherBar.classList.contains('hidden')) {
-            cypherInput.focus();
+    // Toggle Filter bar
+    filterToggle.addEventListener('click', function () {
+        filterBar.classList.toggle('hidden');
+        filterToggle.classList.toggle('active');
+        if (!filterBar.classList.contains('hidden')) {
+            document.getElementById('filter-query').focus();
         }
     });
 
@@ -134,6 +136,12 @@ function initGraphSearch() {
     legendToggle.addEventListener('click', function () {
         legend.classList.toggle('hidden');
         legendToggle.classList.toggle('active');
+    });
+
+    // Toggle edge labels
+    edgeLabelToggle.addEventListener('click', function () {
+        edgeLabelToggle.classList.toggle('active');
+        toggleEdgeLabels();
     });
 
     // Toggle graph/table view
@@ -149,21 +157,62 @@ function initGraphSearch() {
         }
     });
 
-    // Run Cypher
-    cypherRun.addEventListener('click', function () {
-        runCypher(cypherInput.value);
+    // Run Filter
+    filterRun.addEventListener('click', function () {
+        runFilter();
     });
-    cypherInput.addEventListener('keydown', function (e) {
+    document.getElementById('filter-query').addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
-            runCypher(cypherInput.value);
+            runFilter();
         }
     });
 
     // Clear button
     clearBtn.addEventListener('click', function () {
         cy.elements().remove();
-        localStorage.removeItem('rtk-graph');
         updateGraphInfo();
+    });
+
+    // Save graph to JSON file
+    saveBtn.addEventListener('click', function () {
+        window.location.href = '/api/graph/export';
+    });
+
+    // Load graph from JSON file
+    loadBtn.addEventListener('click', function () {
+        loadFileInput.click();
+    });
+    loadFileInput.addEventListener('change', function () {
+        var file = loadFileInput.files[0];
+        if (!file) return;
+        var formData = new FormData();
+        formData.append('file', file);
+        fetch('/api/graph/import', { method: 'POST', body: formData })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.error) {
+                    if (term) {
+                        term.write('\r\n\x1b[31mImport error: ' + data.error + '\x1b[0m\r\n');
+                        showPrompt();
+                    }
+                    return;
+                }
+                if (term) {
+                    term.write('\r\n\x1b[32m' + data.message + '\x1b[0m\r\n');
+                    showPrompt();
+                }
+                // Reload graph view
+                loadGraph();
+            })
+            .catch(function (err) {
+                if (term) {
+                    term.write('\r\n\x1b[31mImport failed: ' + err + '\x1b[0m\r\n');
+                    showPrompt();
+                }
+            })
+            .finally(function () {
+                loadFileInput.value = '';
+            });
     });
 }
 
@@ -202,25 +251,34 @@ function graphSearch(query) {
         });
 }
 
-function runCypher(query) {
-    query = query.trim();
-    if (!query) return;
+function runFilter() {
+    var filterType = document.getElementById('filter-type').value;
+    var filterYearMin = document.getElementById('filter-year-min').value;
+    var filterYearMax = document.getElementById('filter-year-max').value;
+    var filterQuery = document.getElementById('filter-query').value.trim();
 
-    fetch('/api/graph/cypher', {
+    if (!filterType && !filterYearMin && !filterYearMax && !filterQuery) return;
+
+    var body = {};
+    if (filterType) body.type = filterType;
+    if (filterYearMin) body.yearMin = parseInt(filterYearMin);
+    if (filterYearMax) body.yearMax = parseInt(filterYearMax);
+    if (filterQuery) body.query = filterQuery;
+
+    fetch('/api/graph/filter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query })
+        body: JSON.stringify(body)
     })
         .then(function (res) { return res.json(); })
         .then(function (data) {
             if (data.error) {
                 if (term) {
-                    term.write('\r\n\x1b[31mCypher error: ' + data.error + '\x1b[0m\r\n');
+                    term.write('\r\n\x1b[31mFilter error: ' + data.error + '\x1b[0m\r\n');
                     showPrompt();
                 }
                 return;
             }
-            // Replace current view with cypher results
             cy.elements().remove();
             hideGraphBanner();
             cy.add(data.nodes);
@@ -229,13 +287,13 @@ function runCypher(query) {
             updateGraphInfo();
 
             if (term) {
-                term.write('\r\n\x1b[32mCypher returned ' + data.nodes.length + ' nodes\x1b[0m\r\n');
+                term.write('\r\n\x1b[32mFilter returned ' + data.nodes.length + ' nodes\x1b[0m\r\n');
                 showPrompt();
             }
         })
         .catch(function (err) {
             if (term) {
-                term.write('\r\n\x1b[31mCypher error: ' + err + '\x1b[0m\r\n');
+                term.write('\r\n\x1b[31mFilter error: ' + err + '\x1b[0m\r\n');
                 showPrompt();
             }
         });
@@ -259,13 +317,13 @@ function updateGraphInfo() {
 
 function initGraphControls() {
     var layoutSelect = document.getElementById('layout-select');
-    var exportBtn = document.getElementById('export-btn');
+    var exportPngBtn = document.getElementById('export-png-btn');
 
     layoutSelect.addEventListener('change', function () {
         runLayoutWithName(layoutSelect.value);
     });
 
-    exportBtn.addEventListener('click', function () {
+    exportPngBtn.addEventListener('click', function () {
         exportGraph();
     });
 }
@@ -307,7 +365,7 @@ function exportGraph() {
 // --- LocalStorage Persistence ---
 
 function saveGraph() {
-    // No-op: we always start fresh with preview
+    // No-op: persistence is via export/import JSON
 }
 
 function loadPreview() {

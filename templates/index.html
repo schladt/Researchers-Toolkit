@@ -35,8 +35,9 @@
                 <div id="graph-search">
                     <input type="text" id="search-input" placeholder="Search nodes..." autocomplete="off">
                     <button id="search-btn" class="toolbar-btn" title="Search database for nodes matching your query and add them to the graph">&#x1F50D;</button>
-                    <button id="cypher-toggle" class="toolbar-btn" title="Open Cypher query bar for advanced Neo4j queries">&#x276F;_</button>
+                    <button id="filter-toggle" class="toolbar-btn" title="Open filter bar to query by type, year, or text">&#x276F;_</button>
                     <button id="legend-toggle" class="toolbar-btn" title="Show or hide the node/edge type legend">&#x25C9;</button>
+                    <button id="edge-label-toggle" class="toolbar-btn" title="Show or hide relationship labels on edges">&#x2ADD;</button>
                     <button id="view-toggle" class="toolbar-btn" title="Switch between graph visualization and table view">&#x2637;</button>
                 </div>
                 <div id="graph-controls">
@@ -50,13 +51,26 @@
                             <option value="grid">Grid</option>
                         </select>
                     </label>
-                    <button id="export-btn" class="toolbar-btn" title="Download the current graph view as a PNG image">Export</button>
+                    <button id="export-png-btn" class="toolbar-btn" title="Download the current graph view as a PNG image">PNG</button>
+                    <button id="save-btn" class="toolbar-btn" title="Save graph data to a JSON file for later">Save</button>
+                    <button id="load-btn" class="toolbar-btn" title="Load a previously saved graph JSON file">Load</button>
+                    <input type="file" id="load-file-input" accept=".json" style="display:none">
                     <button id="clear-btn" class="toolbar-btn" title="Remove all nodes and edges from the current view">Clear</button>
                 </div>
             </div>
-            <div id="cypher-bar" class="hidden">
-                <input type="text" id="cypher-input" placeholder="MATCH (n) RETURN n LIMIT 25" autocomplete="off">
-                <button id="cypher-run" class="toolbar-btn" title="Execute the Cypher query and display results in the graph">Run</button>
+            <div id="filter-bar" class="hidden">
+                <select id="filter-type">
+                    <option value="">All types</option>
+                    <option value="Paper">Paper</option>
+                    <option value="Author">Author</option>
+                    <option value="Venue">Venue</option>
+                    <option value="Keyword">Keyword</option>
+                    <option value="Tag">Tag</option>
+                </select>
+                <input type="number" id="filter-year-min" placeholder="Year min" min="1900" max="2100" style="width:80px">
+                <input type="number" id="filter-year-max" placeholder="Year max" min="1900" max="2100" style="width:80px">
+                <input type="text" id="filter-query" placeholder="Text filter..." autocomplete="off">
+                <button id="filter-run" class="toolbar-btn" title="Apply filter and display matching nodes">Filter</button>
             </div>
             <div id="graph-container">
                 <div id="cy"></div>
