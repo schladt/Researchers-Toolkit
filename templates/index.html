@@ -6,8 +6,18 @@
     <title>Researcher's Toolkit</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 
-    <!-- Cytoscape.js -->
+    <!-- Cytoscape.js + layout extensions -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/layout-base@2.0.1/layout-base.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cose-base@2.2.0/cose-base.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+    <script>
+        // Register extensions (in case auto-registration didn't fire)
+        if (typeof cytoscapeFcose !== 'undefined') cytoscape.use(cytoscapeFcose);
+        if (typeof cytoscapeDagre !== 'undefined') cytoscape.use(cytoscapeDagre);
+    </script>
 
     <!-- xterm.js -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
@@ -24,76 +34,129 @@
     <div id="container">
         <div id="console-panel">
             <div id="console-header">
-                <span class="panel-title">Console</span>
+                <span class="panel-title" title="The console connects to Semantic Scholar's database of 200M+ papers. Use commands like 'search', 'author', 'refs', 'cites' to find and add papers to your local study.">Console</span>
+                <span class="panel-subtitle">explore all of Semantic Scholar</span>
             </div>
             <div id="terminal"></div>
         </div>
         <div id="divider"></div>
         <div id="graph-panel">
             <div id="graph-header">
-                <span class="panel-title">Local Graph</span>
+                <span class="panel-title" title="Your local research study is the collection of papers, authors, and relationships you've gathered. It lives in memory and can be saved/loaded as JSON.">Research Study Graph</span>
+                <span class="panel-subtitle">your local research study</span>
                 <div id="graph-search">
-                    <input type="text" id="search-input" placeholder="Search nodes..." autocomplete="off">
-                    <button id="search-btn" class="toolbar-btn" title="Search database for nodes matching your query and add them to the graph">&#x1F50D;</button>
-                    <button id="filter-toggle" class="toolbar-btn" title="Open filter bar to query by type, year, or text">&#x276F;_</button>
-                    <button id="legend-toggle" class="toolbar-btn" title="Show or hide the node/edge type legend">&#x25C9;</button>
-                    <button id="edge-label-toggle" class="toolbar-btn" title="Show or hide relationship labels on edges">&#x2ADD;</button>
-                    <button id="view-toggle" class="toolbar-btn" title="Switch between graph visualization and table view">&#x2637;</button>
+                    <input type="text" id="search-input" placeholder="enter text (blank for all)" autocomplete="off">
+                    <button id="search-btn" class="toolbar-btn" title="Search Semantic Scholar and add matching papers to your study">&#x1F50D;</button>
+                    <button id="view-toggle" class="toolbar-btn icon-btn" title="Switch between graph visualization and table view">&#x2637;</button>
+                    <button id="settings-toggle" class="toolbar-btn icon-btn" title="Toggle settings panel">&#x2699;</button>
+                    <label class="header-toggle" title="Show/hide the filter bar">
+                        <span class="header-toggle-label">Filter</span>
+                        <input type="checkbox" id="filter-toggle-check" class="sp-checkbox">
+                        <span class="sp-switch"></span>
+                    </label>
                 </div>
                 <div id="graph-controls">
                     <span id="graph-info"></span>
-                    <label class="layout-label" title="Choose how nodes are arranged in the graph">Layout
-                        <select id="layout-select">
-                            <option value="cose">Force</option>
-                            <option value="breadthfirst">Tree</option>
-                            <option value="concentric">Concentric</option>
-                            <option value="circle">Circle</option>
-                            <option value="grid">Grid</option>
+                </div>
+            </div>
+            <div id="graph-body">
+                <div id="graph-main">
+                    <div id="filter-bar" class="hidden">
+                        <select id="filter-type">
+                            <option value="">All types</option>
+                            <option value="Paper">Paper</option>
+                            <option value="Author">Author</option>
+                            <option value="Venue">Venue</option>
+                            <option value="Keyword">Keyword</option>
+                            <option value="Tag">Tag</option>
                         </select>
-                    </label>
-                    <button id="export-png-btn" class="toolbar-btn" title="Download the current graph view as a PNG image">PNG</button>
-                    <button id="save-btn" class="toolbar-btn" title="Save graph data to a JSON file for later">Save</button>
-                    <button id="load-btn" class="toolbar-btn" title="Load a previously saved graph JSON file">Load</button>
-                    <input type="file" id="load-file-input" accept=".json" style="display:none">
-                    <button id="clear-btn" class="toolbar-btn" title="Remove all nodes and edges from the current view">Clear</button>
+                        <input type="number" id="filter-year-min" placeholder="Year min" min="1900" max="2100" style="width:80px">
+                        <input type="number" id="filter-year-max" placeholder="Year max" min="1900" max="2100" style="width:80px">
+                        <input type="text" id="filter-query" placeholder="Text filter..." autocomplete="off">
+                        <button id="filter-run" class="toolbar-btn" title="Apply filter and display matching nodes">Filter</button>
+                    </div>
+                    <div id="graph-container">
+                        <div id="cy"></div>
+                        <div id="graph-legend">
+                            <div class="legend-title">Legend</div>
+                            <div class="legend-item"><span class="legend-dot" style="background:#5b9bd5"></span>Paper</div>
+                            <div class="legend-item"><span class="legend-dot legend-diamond" style="background:#4db6ac"></span>Author</div>
+                            <div class="legend-item"><span class="legend-dot legend-rect" style="background:#e8a838"></span>Venue</div>
+                            <div class="legend-item"><span class="legend-dot" style="background:#607d8b; width:8px; height:8px"></span>Keyword</div>
+                            <div class="legend-item"><span class="legend-dot legend-hex" style="background:#9575cd"></span>Tag</div>
+                            <div class="legend-sep"></div>
+                            <div class="legend-item"><span class="legend-line legend-solid"></span>References</div>
+                            <div class="legend-item"><span class="legend-line legend-dashed"></span>Authored by</div>
+                            <div class="legend-item"><span class="legend-line legend-dotted"></span>Published in</div>
+                        </div>
+                    </div>
+                    <div id="table-view" class="hidden">
+                        <div id="table-placeholder">
+                            <p>Search results will appear here as a table.</p>
+                            <p class="hint">Use the search bar or console to find papers.</p>
+                        </div>
+                        <div id="table-container"></div>
+                    </div>
+                </div>
+                <div id="settings-panel">
+                    <div class="sp-section">
+                        <div class="sp-section-title">Layout</div>
+                        <div class="sp-row">
+                            <select id="layout-select">
+                                <option value="fcose" selected>Force (fcose)</option>
+                                <option value="dagre">Hierarchy (dagre)</option>
+                                <option value="cose">Force (basic)</option>
+                                <option value="breadthfirst">Tree</option>
+                                <option value="concentric">Concentric</option>
+                                <option value="circle">Circle</option>
+                                <option value="grid">Grid</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="sp-section">
+                        <div class="sp-section-title">Node Sizing</div>
+                        <div class="sp-segmented" id="size-segmented">
+                            <button class="sp-seg-btn active" data-mode="fixed">Fixed</button>
+                            <button class="sp-seg-btn" data-mode="citations">Citations</button>
+                            <button class="sp-seg-btn" data-mode="connections">Connections</button>
+                        </div>
+                    </div>
+                    <div class="sp-section">
+                        <div class="sp-section-title">Display</div>
+                        <label class="sp-toggle-row">
+                            <span>Edge Labels</span>
+                            <input type="checkbox" id="edge-label-check" class="sp-checkbox">
+                            <span class="sp-switch"></span>
+                        </label>
+                        <label class="sp-toggle-row">
+                            <span>Legend</span>
+                            <input type="checkbox" id="legend-check" class="sp-checkbox" checked>
+                            <span class="sp-switch"></span>
+                        </label>
+
+                    </div>
+                    <div class="sp-section">
+                        <div class="sp-section-title">File</div>
+                        <div class="sp-btn-grid">
+                            <button id="export-png-btn" class="sp-action-btn">Export PNG</button>
+                            <button id="save-btn" class="sp-action-btn">Save JSON</button>
+                            <button id="load-btn" class="sp-action-btn">Load JSON</button>
+                            <button id="new-study-btn" class="sp-action-btn sp-danger">New Study</button>
+                            <button id="clear-btn" class="sp-action-btn sp-danger">Clear View</button>
+                        </div>
+                        <input type="file" id="load-file-input" accept=".json" style="display:none">
+                    </div>
                 </div>
             </div>
-            <div id="filter-bar" class="hidden">
-                <select id="filter-type">
-                    <option value="">All types</option>
-                    <option value="Paper">Paper</option>
-                    <option value="Author">Author</option>
-                    <option value="Venue">Venue</option>
-                    <option value="Keyword">Keyword</option>
-                    <option value="Tag">Tag</option>
-                </select>
-                <input type="number" id="filter-year-min" placeholder="Year min" min="1900" max="2100" style="width:80px">
-                <input type="number" id="filter-year-max" placeholder="Year max" min="1900" max="2100" style="width:80px">
-                <input type="text" id="filter-query" placeholder="Text filter..." autocomplete="off">
-                <button id="filter-run" class="toolbar-btn" title="Apply filter and display matching nodes">Filter</button>
-            </div>
-            <div id="graph-container">
-                <div id="cy"></div>
-                <div id="graph-legend" class="hidden">
-                    <div class="legend-title">Legend</div>
-                    <div class="legend-item"><span class="legend-dot" style="background:#5b9bd5"></span>Paper</div>
-                    <div class="legend-item"><span class="legend-dot legend-diamond" style="background:#4db6ac"></span>Author</div>
-                    <div class="legend-item"><span class="legend-dot legend-rect" style="background:#e8a838"></span>Venue</div>
-                    <div class="legend-item"><span class="legend-dot" style="background:#607d8b; width:8px; height:8px"></span>Keyword</div>
-                    <div class="legend-item"><span class="legend-dot legend-hex" style="background:#9575cd"></span>Tag</div>
-                    <div class="legend-sep"></div>
-                    <div class="legend-item"><span class="legend-line legend-solid"></span>References</div>
-                    <div class="legend-item"><span class="legend-line legend-dashed"></span>Authored by</div>
-                    <div class="legend-item"><span class="legend-line legend-dotted"></span>Published in</div>
-                </div>
-            </div>
-            <div id="table-view" class="hidden">
-                <div id="table-placeholder">
-                    <p>Search results will appear here as a table.</p>
-                    <p class="hint">Use the search bar or console to find papers.</p>
-                </div>
-                <div id="table-container"></div>
-            </div>
+        </div>
+    </div>
+
+    <!-- Modal dialog -->
+    <div id="modal-overlay" class="hidden">
+        <div id="modal-dialog">
+            <div id="modal-title"></div>
+            <div id="modal-body"></div>
+            <div id="modal-actions"></div>
         </div>
     </div>
 

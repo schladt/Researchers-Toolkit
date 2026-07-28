@@ -174,6 +174,24 @@ class GraphStore:
         self.edges = data.get("edges", [])
         self._rebuild_index()
 
+    def merge_from_json(self, data):
+        """Merge imported graph into existing graph without duplicates."""
+        for node_id, props in data.get("nodes", {}).items():
+            if node_id not in self.nodes:
+                self.nodes[node_id] = props
+                self.adjacency.setdefault(node_id, [])
+        for edge in data.get("edges", []):
+            key = (edge["source"], edge["target"], edge["type"])
+            if key not in self._edge_set:
+                self.edges.append(edge)
+                self._edge_set.add(key)
+                self.adjacency.setdefault(edge["source"], []).append(
+                    (edge["target"], edge["type"], "out")
+                )
+                self.adjacency.setdefault(edge["target"], []).append(
+                    (edge["source"], edge["type"], "in")
+                )
+
     def export_file(self, filepath):
         """Export graph to a JSON file."""
         with open(filepath, "w") as f:
@@ -206,11 +224,16 @@ class GraphStore:
         node_type = props.get("type", "")
         if node_type == "Paper":
             title = props.get("Title", "Untitled")
-            return title[:40] + "..." if len(title) > 40 else title
+            truncated = title[:35] + "..." if len(title) > 35 else title
+            year = props.get("Year")
+            if year:
+                return f"{truncated} ({year})"
+            return truncated
         elif node_type == "Author":
             return props.get("Name", "Unknown")
         elif node_type == "Venue":
-            return props.get("Name", "Unknown")
+            name = props.get("Name", "Unknown")
+            return name[:30] + "..." if len(name) > 30 else name
         elif node_type == "Keyword":
             return props.get("Value", "")
         elif node_type == "Tag":

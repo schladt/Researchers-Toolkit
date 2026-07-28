@@ -1,35 +1,43 @@
 # Researchers-Toolkit
 
-A browser-based tool for exploring academic research through connected knowledge graphs. Built with Python, Flask, Neo4j, and the Semantic Scholar API, this toolkit lets you discover papers, build citation networks, and interactively visualize relationships between papers, authors, venues, and concepts — all from a single-page app with a split-pane layout: interactive graph visualization on the right, command console on the left.
+A browser-based tool for exploring academic research through connected knowledge graphs. Built with Python, Flask, and the Semantic Scholar API, this toolkit lets you discover papers, build citation networks, and interactively visualize relationships between papers, authors, venues, and concepts — all from a single-page app with a split-pane layout: interactive graph visualization on the right, command console on the left.
 
 ## Features
 
 ### Graph Visualization
 
-- Interactive force-directed graph (Cytoscape.js)
-- Multiple layout algorithms (Force, Tree, Concentric, Circle, Grid)
-- Search bar for finding nodes by name
-- Cypher mode for raw Neo4j queries
+- Interactive graph with multiple layout algorithms (fcose, dagre, cose, tree, concentric, circle, grid)
+- Collapsible settings panel with layout selection, node sizing, display toggles, and file actions
+- Dynamic node sizing by citation count or connection degree
+- Color-coded nodes by type: Papers, Authors, Venues, Keywords, Tags
+- Edge labels for relationship types (References, Authored by, Published in)
 - Right-click context menus (expand neighbors, remove nodes, open URLs)
-- Hover tooltips with node details
+- Hover tooltips with node details (citations, degree, references)
 - Double-click to expand node neighbors
+- Click-to-highlight neighborhood (dims unconnected nodes)
 - Switchable graph/table view
+- Filter bar for narrowing by type, year range, and text
+- Legend overlay
 - Export graph as PNG
+- Graph info showing displayed vs total study counts
 
 ### Research Discovery
 
 - **Keyword Search**: Find papers by research topics
 - **Author Search**: Discover papers by specific researchers
 - **Paper ID Lookup**: Direct access via Semantic Scholar IDs
+- **Field-of-Study Filter**: Narrow searches to specific academic fields
 
 ### Knowledge Graph Construction
 
+- In-memory graph store with JSON export/import for persistence
 - Automatic graph building: papers, authors, venues, keywords, tags
 - Citation network mapping (REFERENCES relationships)
 - Author collaboration tracking (AUTHORED_BY relationships)
 - Venue organization (PUBLISHED_IN relationships)
 - Keyword extraction from abstracts (NLTK)
 - Custom project tagging
+- Study management: save/load entire study or current view, merge or replace on import
 
 ### Console Commands
 
@@ -37,8 +45,10 @@ A browser-based tool for exploring academic research through connected knowledge
 - `author <name>` — Search for authors
 - `paper <id>` — Get paper details by ID
 - `select <n>` — Select a result from the last search
-- `add` / `add refs` / `add keywords` — Add papers to graph
+- `add` / `add refs` / `add cites` / `add keywords` — Add papers to graph
+- `refs [n]` / `cites [n]` — Show references or citations of selected paper
 - `tags <tag1, tag2>` — Set project tags
+- `field <name|clear>` — Set or clear field-of-study filter
 - `graph load|clear|stats|reset` — Graph management
 - `help` — Show all available commands
 
@@ -47,8 +57,7 @@ A browser-based tool for exploring academic research through connected knowledge
 ### Prerequisites
 
 1. **Python 3.8+**
-2. **Neo4j Database** (Community or Enterprise)
-3. **Semantic Scholar API Key** (optional, recommended for higher rate limits)
+2. **Semantic Scholar API Key** (optional, recommended for higher rate limits)
 
 ### Setup
 
@@ -70,11 +79,6 @@ pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```bash
-# Required: Neo4j Database Connection
-NEO4J_URL=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=neo4j
-
 # Optional: Semantic Scholar API Key (for higher rate limits)
 S2_API_KEY=your_semantic_scholar_api_key_here
 ```
@@ -86,14 +90,6 @@ S2_API_KEY=your_semantic_scholar_api_key_here
 3. Generate an API key
 
 The tool works without an API key but with lower rate limits (1 req/sec).
-
-### Neo4j Setup
-
-Install Neo4j via any method:
-
-- [Neo4j Desktop](https://neo4j.com/download/) (recommended for beginners)
-- `brew install neo4j` (macOS)
-- Docker: `docker run -p 7474:7474 -p 7687:7687 --env NEO4J_AUTH=neo4j/neo4j neo4j:latest`
 
 ## Usage
 

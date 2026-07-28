@@ -139,9 +139,13 @@ def api_graph_import():
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
     file = request.files['file']
+    mode = request.form.get('mode', 'replace')  # 'replace' or 'merge'
     try:
         data = json.load(file)
-        c.graph.from_json(data)
+        if mode == 'merge':
+            c.graph.merge_from_json(data)
+        else:
+            c.graph.from_json(data)
         stats = c.graph.stats()
         return jsonify({
             "status": "ok",

@@ -6,23 +6,43 @@ function initGraph() {
     cy = cytoscape({
         container: document.getElementById('cy'),
         style: [
-            // Paper nodes - soft blue
+            // Default node style (MUST come first — Cytoscape ignores specificity, last matching selector wins)
+            {
+                selector: 'node',
+                style: {
+                    'label': 'data(label)',
+                    'color': '#d4d4d4',
+                    'font-size': '8px',
+                    'text-valign': 'bottom',
+                    'text-margin-y': 5,
+                    'text-outline-width': 2,
+                    'text-outline-color': '#1a1a1a',
+                    'background-color': '#666',
+                    'width': 18,
+                    'height': 18,
+                    'overlay-opacity': 0
+                }
+            },
+            // Paper nodes - blue
             {
                 selector: 'node[type="Paper"]',
                 style: {
                     'label': 'data(label)',
-                    'color': '#c8d0dc',
-                    'font-size': '10px',
+                    'color': '#e0e6ed',
+                    'font-size': '8px',
                     'text-valign': 'bottom',
                     'text-margin-y': 5,
                     'text-wrap': 'ellipsis',
-                    'text-max-width': '80px',
+                    'text-max-width': '90px',
+                    'text-outline-width': 2,
+                    'text-outline-color': '#1a1a1a',
                     'background-color': '#5b9bd5',
-                    'border-width': 1.5,
-                    'border-color': '#7bb8e8',
+                    'border-width': 2,
+                    'border-color': '#7bb3e0',
                     'shape': 'ellipse',
                     'width': 28,
-                    'height': 28
+                    'height': 28,
+                    'overlay-opacity': 0
                 }
             },
             // Author nodes - teal
@@ -30,38 +50,44 @@ function initGraph() {
                 selector: 'node[type="Author"]',
                 style: {
                     'label': 'data(label)',
-                    'color': '#c8d0dc',
-                    'font-size': '10px',
+                    'color': '#e0e6ed',
+                    'font-size': '8px',
                     'text-valign': 'bottom',
                     'text-margin-y': 5,
+                    'text-outline-width': 2,
+                    'text-outline-color': '#1a1a1a',
                     'background-color': '#4db6ac',
-                    'border-width': 1.5,
-                    'border-color': '#80cbc4',
+                    'border-width': 2,
+                    'border-color': '#6ec8be',
                     'shape': 'diamond',
-                    'width': 24,
-                    'height': 24
+                    'width': 22,
+                    'height': 22,
+                    'overlay-opacity': 0
                 }
             },
-            // Venue nodes - warm amber
+            // Venue nodes - gold
             {
                 selector: 'node[type="Venue"]',
                 style: {
                     'label': 'data(label)',
-                    'color': '#c8d0dc',
-                    'font-size': '9px',
+                    'color': '#e0e6ed',
+                    'font-size': '7px',
                     'text-valign': 'bottom',
                     'text-margin-y': 5,
                     'text-wrap': 'ellipsis',
-                    'text-max-width': '70px',
+                    'text-max-width': '80px',
+                    'text-outline-width': 2,
+                    'text-outline-color': '#1a1a1a',
                     'background-color': '#e8a838',
-                    'border-width': 1.5,
+                    'border-width': 2,
                     'border-color': '#f0c060',
                     'shape': 'round-rectangle',
-                    'width': 22,
-                    'height': 22
+                    'width': 20,
+                    'height': 20,
+                    'overlay-opacity': 0
                 }
             },
-            // Keyword nodes - muted slate
+            // Keyword nodes - slate (no label)
             {
                 selector: 'node[type="Keyword"]',
                 style: {
@@ -70,47 +96,92 @@ function initGraph() {
                     'border-width': 1,
                     'border-color': '#78909c',
                     'shape': 'ellipse',
-                    'width': 10,
-                    'height': 10
+                    'width': 8,
+                    'height': 8,
+                    'overlay-opacity': 0
                 }
             },
-            // Tag nodes - soft purple
+            // Tag nodes - purple
             {
                 selector: 'node[type="Tag"]',
                 style: {
                     'label': 'data(label)',
-                    'color': '#c8d0dc',
-                    'font-size': '10px',
+                    'color': '#e0e6ed',
+                    'font-size': '8px',
                     'text-valign': 'bottom',
                     'text-margin-y': 5,
+                    'text-outline-width': 2,
+                    'text-outline-color': '#1a1a1a',
                     'background-color': '#9575cd',
-                    'border-width': 1.5,
+                    'border-width': 2,
                     'border-color': '#b39ddb',
                     'shape': 'hexagon',
-                    'width': 26,
-                    'height': 26
+                    'width': 24,
+                    'height': 24,
+                    'overlay-opacity': 0
                 }
             },
-            // Default node style
-            {
-                selector: 'node',
-                style: {
-                    'label': 'data(label)',
-                    'color': '#d4d4d4',
-                    'font-size': '10px',
-                    'text-valign': 'bottom',
-                    'text-margin-y': 5,
-                    'background-color': '#666',
-                    'width': 20,
-                    'height': 20
-                }
-            },
-            // Selected node
+            // Selected node - bright white ring
             {
                 selector: 'node:selected',
                 style: {
                     'border-width': 3,
+                    'border-color': '#ffffff',
+                    'overlay-opacity': 0.08,
+                    'overlay-color': '#ffffff'
+                }
+            },
+            // Prevent edge click/active from showing labels
+            {
+                selector: 'edge:active',
+                style: {
+                    'font-size': '0px'
+                }
+            },
+            {
+                selector: 'edge:selected',
+                style: {
+                    'font-size': '0px'
+                }
+            },
+            // Faded state for non-neighbors on select
+            {
+                selector: 'node.faded',
+                style: {
+                    'opacity': 0.15
+                }
+            },
+            {
+                selector: 'edge.faded',
+                style: {
+                    'opacity': 0.08
+                }
+            },
+            // Highlighted neighbors
+            {
+                selector: 'node.highlighted',
+                style: {
+                    'opacity': 1,
+                    'border-width': 2.5,
                     'border-color': '#ffffff'
+                }
+            },
+            // Default edge style (MUST come before typed edges — last matching selector wins)
+            {
+                selector: 'edge',
+                style: {
+                    'width': 1,
+                    'line-color': '#4a4a4a',
+                    'target-arrow-color': '#4a4a4a',
+                    'target-arrow-shape': 'none',
+                    'curve-style': 'bezier',
+                    'opacity': 0.5,
+                    'label': 'data(type)',
+                    'font-size': '0px',
+                    'text-rotation': 'autorotate',
+                    'color': '#888',
+                    'text-opacity': 0.7,
+                    'text-margin-y': -8
                 }
             },
             // REFERENCES edges - directed arrows, blue-gray
@@ -167,24 +238,6 @@ function initGraph() {
                     'text-opacity': 0.7,
                     'text-margin-y': -8
                 }
-            },
-            // Default edge style
-            {
-                selector: 'edge',
-                style: {
-                    'width': 1,
-                    'line-color': '#4a4a4a',
-                    'target-arrow-color': '#4a4a4a',
-                    'target-arrow-shape': 'none',
-                    'curve-style': 'bezier',
-                    'opacity': 0.5,
-                    'label': 'data(type)',
-                    'font-size': '0px',
-                    'text-rotation': 'autorotate',
-                    'color': '#888',
-                    'text-opacity': 0.7,
-                    'text-margin-y': -8
-                }
             }
         ],
         layout: { name: 'preset' },
@@ -193,11 +246,17 @@ function initGraph() {
         maxZoom: 5
     });
 
-    // Click node to show details in console
+    // Click node to show details in console + highlight neighborhood
     cy.on('tap', 'node', function (evt) {
         var node = evt.target;
         var data = node.data();
         showNodeDetails(data);
+
+        // Fade all, highlight neighborhood
+        var neighborhood = node.closedNeighborhood();
+        cy.elements().addClass('faded');
+        neighborhood.removeClass('faded');
+        neighborhood.nodes().addClass('highlighted');
     });
 
     // Double-click to expand neighbors
@@ -212,10 +271,12 @@ function initGraph() {
         showContextMenu(evt.originalEvent, evt.target);
     });
 
-    // Hide context menu on tap elsewhere
+    // Hide context menu on tap elsewhere + clear fading
     cy.on('tap', function (evt) {
         if (evt.target === cy) {
             hideContextMenu();
+            cy.elements().removeClass('faded');
+            cy.nodes().removeClass('highlighted');
         }
     });
 
@@ -250,6 +311,10 @@ function loadGraph() {
             cy.elements().remove();
             cy.add(data.nodes);
             cy.add(data.edges);
+            // Apply current edge label visibility
+            if (edgeLabelsVisible) {
+                cy.edges().style('font-size', '8px');
+            }
             runLayout();
             updateGraphInfo();
             term.write('\x1b[32mRendered: ' + data.nodes.length + ' nodes, ' + data.edges.length + ' edges.\x1b[0m\r\n');
@@ -293,13 +358,17 @@ function expandNeighbors(nodeId) {
                        cy.getElementById(e.data.target).length > 0;
             });
             cy.add(newEdges);
+            // Apply current edge label visibility to new edges
+            if (edgeLabelsVisible) {
+                cy.edges().style('font-size', '8px');
+            }
             runLayout();
             updateGraphInfo();
         });
 }
 
 function runLayout() {
-    var name = document.getElementById('layout-select').value || 'cose';
+    var name = document.getElementById('layout-select').value || 'fcose';
     runLayoutWithName(name);
 }
 
@@ -469,21 +538,23 @@ function showTooltip(evt) {
     var lines = [];
     if (type === 'Paper') {
         lines.push('<strong>' + escapeHtml(data.Title || data.label) + '</strong>');
-        if (data.PrimaryAuthor) lines.push(escapeHtml(data.PrimaryAuthor));
-        if (data.Year) lines.push('Year: ' + data.Year);
-        if (data.CitationCount !== undefined) lines.push('Citations: ' + data.CitationCount);
+        if (data.PrimaryAuthor) lines.push('<span class="tip-dim">by</span> ' + escapeHtml(data.PrimaryAuthor));
+        if (data.Year) lines.push('<span class="tip-dim">Year:</span> ' + data.Year);
+        if (data.CitationCount !== undefined) lines.push('<span class="tip-dim">Citations:</span> ' + data.CitationCount);
+        if (data.ReferenceCount !== undefined) lines.push('<span class="tip-dim">References:</span> ' + data.ReferenceCount);
+        lines.push('<span class="tip-dim">Connections:</span> ' + node.degree());
     } else if (type === 'Author') {
         lines.push('<strong>' + escapeHtml(data.Name || data.label) + '</strong>');
-        lines.push('Author');
+        lines.push('<span class="tip-dim">Papers in graph:</span> ' + node.degree());
     } else if (type === 'Venue') {
         lines.push('<strong>' + escapeHtml(data.Name || data.label) + '</strong>');
-        lines.push('Venue');
+        lines.push('<span class="tip-dim">Papers in graph:</span> ' + node.degree());
     } else if (type === 'Keyword') {
-        lines.push(escapeHtml(data.Name || data.label || data.id));
-        lines.push('Keyword');
+        lines.push(escapeHtml(data.Value || data.label || data.id));
+        lines.push('<span class="tip-dim">Keyword</span>');
     } else if (type === 'Tag') {
         lines.push('<strong>' + escapeHtml(data.Tag || data.label) + '</strong>');
-        lines.push('Tag');
+        lines.push('<span class="tip-dim">Tag • ' + node.degree() + ' items</span>');
     } else {
         lines.push(escapeHtml(data.label || data.id));
     }
@@ -519,3 +590,55 @@ function toggleEdgeLabels() {
     if (!cy) return;
     cy.edges().style('font-size', edgeLabelsVisible ? '8px' : '0px');
 }
+
+// --- Node sizing toggle ---
+// Modes: 'fixed' (default), 'citations', 'connections'
+var nodeSizeMode = 'fixed';
+
+function cycleNodeSizeMode() {
+    if (nodeSizeMode === 'fixed') {
+        nodeSizeMode = 'citations';
+    } else if (nodeSizeMode === 'citations') {
+        nodeSizeMode = 'connections';
+    } else {
+        nodeSizeMode = 'fixed';
+    }
+    applyNodeSizing();
+    return nodeSizeMode;
+}
+
+function applyNodeSizing() {
+    if (!cy) return;
+
+    cy.nodes().forEach(function (node) {
+        var type = node.data('type');
+        var size;
+
+        if (nodeSizeMode === 'fixed') {
+            // Reset to defaults
+            if (type === 'Paper') size = 28;
+            else if (type === 'Author') size = 22;
+            else if (type === 'Venue') size = 20;
+            else if (type === 'Keyword') size = 8;
+            else if (type === 'Tag') size = 24;
+            else size = 18;
+        } else if (nodeSizeMode === 'citations') {
+            var citations = node.data('CitationCount') || 0;
+            if (type === 'Paper') {
+                // Map citations: 0 -> 16, 500+ -> 60
+                size = Math.min(60, Math.max(16, 16 + Math.sqrt(citations) * 2));
+            } else {
+                // Non-papers: size by degree
+                size = Math.min(40, Math.max(12, 12 + node.degree() * 2));
+            }
+        } else if (nodeSizeMode === 'connections') {
+            var deg = node.degree();
+            size = Math.min(55, Math.max(12, 12 + deg * 3.5));
+        }
+
+        node.style({ 'width': size, 'height': size });
+    });
+}
+
+// --- Fade on select (highlight neighborhood) ---
+// Integrated into initGraph tap handlers above.
